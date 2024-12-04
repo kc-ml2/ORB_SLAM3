@@ -28,6 +28,7 @@
 #include "KannalaBrandt8.h"
 #include "MLPnPsolver.h"
 #include "GeometricTools.h"
+#include "Tool.h"
 
 #include <iostream>
 
@@ -36,6 +37,7 @@
 
 
 using namespace std;
+using namespace tool;
 
 namespace ORB_SLAM3
 {
@@ -1521,7 +1523,7 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 {
     mImGray = imRGB;
     cv::Mat imDepth = imD;
-
+    
     if(mImGray.channels()==3)
     {
         if(mbRGB)
@@ -1614,6 +1616,63 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
     return mCurrentFrame.GetPose();
 }
 
+
+Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, const vector<vector<Vec2>> &TextDete, const vector<TextInfo> &TextMean)
+{
+    {
+        std::lock_guard<std::mutex> lock(mTextMutex);
+        mTextDete = TextDete;
+        mTextMean = TextMean;
+        mTframe = timestamp;
+    }
+    mImGray = im;
+    if(mImGray.channels()==3)
+    {
+        if(mbRGB)
+            cvtColor(mImGray,mImGray,cv::COLOR_RGB2GRAY);
+        else
+            cvtColor(mImGray,mImGray,cv::COLOR_BGR2GRAY);
+    }
+    else if(mImGray.channels()==4)
+    {
+        if(mbRGB)
+            cvtColor(mImGray,mImGray,cv::COLOR_RGBA2GRAY);
+        else
+            cvtColor(mImGray,mImGray,cv::COLOR_BGRA2GRAY);
+    }
+
+    if (mSensor == System::MONOCULAR)
+    {
+        if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames)
+            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+        else
+            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+    }
+    else if(mSensor == System::IMU_MONOCULAR)
+    {
+        if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
+        {
+            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
+        }
+        else
+            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
+    }
+
+    if (mState==NO_IMAGES_YET)
+        t0=timestamp;
+
+    mCurrentFrame.mNameFile = filename;
+    mCurrentFrame.mnDataset = mnNumDataset;
+
+#ifdef REGISTER_TIMES
+    vdORBExtract_ms.push_back(mCurrentFrame.mTimeORB_Ext);
+#endif
+
+    lastID = mCurrentFrame.mnId;
+    Track();
+
+    return mCurrentFrame.GetPose();
+}
 
 void Tracking::GrabImuData(const IMU::Point &imuMeasurement)
 {
@@ -1822,6 +1881,7 @@ void Tracking::Track()
             cerr << "ERROR: Frame with a timestamp older than previous frame detected!" << endl;
             unique_lock<mutex> lock(mMutexImuQueue);
             mlQueueImuData.clear();
+            cout << "CreateMapInAtlas1" << endl;
             CreateMapInAtlas();
             return;
         }
@@ -1841,6 +1901,7 @@ void Tracking::Track()
                     }
                     else
                     {
+                        cout << "CreateMapInAtlas2" << endl;
                         CreateMapInAtlas();
                     }
                 }
@@ -1958,14 +2019,14 @@ void Tracking::Track()
 
                 if (!bOK)
                 {
-                    if ( mCurrentFrame.mnId<=(mnLastRelocFrameId+mnFramesToResetIMU) &&
+                    if ( mCurrentFrame.mnId<=(mnLastRelocFrameId+mnFramesToResetIMU) && // IMU 기반
                          (mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor == System::IMU_RGBD))
                     {
                         mState = LOST;
                     }
-                    else if(pCurrentMap->KeyFramesInMap()>10)
+                    else if(pCurrentMap->KeyFramesInMap()>10) // 맵에 충분한 키프레임이 있는 경우, 일시적 추적 실패로 간주
                     {
-                        // cout << "KF in map: " << pCurrentMap->KeyFramesInMap() << endl;
+                        cout << "KF in map: " << pCurrentMap->KeyFramesInMap() << endl;
                         mState = RECENTLY_LOST;
                         mTimeStampLost = mCurrentFrame.mTimeStamp;
                     }
@@ -1980,10 +2041,11 @@ void Tracking::Track()
 
                 if (mState == RECENTLY_LOST)
                 {
+                    // cout << "Lost for a short time" << endl;
                     Verbose::PrintMess("Lost for a short time", Verbose::VERBOSITY_NORMAL);
 
                     bOK = true;
-                    if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD))
+                    if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)) // IMU 사용
                     {
                         if(pCurrentMap->isImuInitialized())
                             PredictStateIMU();
@@ -2000,32 +2062,39 @@ void Tracking::Track()
                     else
                     {
                         // Relocalization
+                        // cout << "Relocalization1" << endl;
                         bOK = Relocalization();
                         //std::cout << "mCurrentFrame.mTimeStamp:" << to_string(mCurrentFrame.mTimeStamp) << std::endl;
                         //std::cout << "mTimeStampLost:" << to_string(mTimeStampLost) << std::endl;
-                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK)
+                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
                         {
+                            cout << "Track Lost..." << endl;
                             mState = LOST;
                             Verbose::PrintMess("Track Lost...", Verbose::VERBOSITY_NORMAL);
                             bOK=false;
+                            cout << "mState: " << mState << endl;
+                            cout << "bOK: " << bOK << endl;
                         }
                     }
                 }
-                else if (mState == LOST)
+                else if (mState == LOST) // 시스템이 initialized 되지 않은 상태에서 프레임의 타임스탬프가 이상할 때 실행
                 {
-
+                    cout << "A new map is started..." << endl;
                     Verbose::PrintMess("A new map is started...", Verbose::VERBOSITY_NORMAL);
 
                     if (pCurrentMap->KeyFramesInMap()<10)
                     {
                         mpSystem->ResetActiveMap();
+                        cout << "Reseting current map..." << endl;
                         Verbose::PrintMess("Reseting current map...", Verbose::VERBOSITY_NORMAL);
                     }else
-                        CreateMapInAtlas();
+                        cout << "CreateMapInAtlas3" << endl;
+                        CreateMapInAtlas(); // 여기서 새로운 맵 생성
 
                     if(mpLastKeyFrame)
                         mpLastKeyFrame = static_cast<KeyFrame*>(NULL);
-
+                    
+                    cout << "done" << endl;
                     Verbose::PrintMess("done", Verbose::VERBOSITY_NORMAL);
 
                     return;
@@ -2040,6 +2109,7 @@ void Tracking::Track()
             {
                 if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
                     Verbose::PrintMess("IMU. State LOST", Verbose::VERBOSITY_NORMAL);
+                cout << "Relocalization2" << endl;
                 bOK = Relocalization();
             }
             else
@@ -2076,6 +2146,7 @@ void Tracking::Track()
                         vbOutMM = mCurrentFrame.mvbOutlier;
                         TcwMM = mCurrentFrame.GetPose();
                     }
+                    cout << "Relocalization3" << endl;
                     bOKReloc = Relocalization();
 
                     if(bOKMM && !bOKReloc)
@@ -2120,17 +2191,18 @@ void Tracking::Track()
         std::chrono::steady_clock::time_point time_StartLMTrack = std::chrono::steady_clock::now();
 #endif
         // If we have an initial estimation of the camera pose and matching. Track the local map.
-        if(!mbOnlyTracking)
+        if(!mbOnlyTracking) // tracking과 mapping 모두 수행
         {
-            if(bOK)
+            if(bOK) // tracking success
             {
+                // cout << "TrackLocalMap!" << endl;
                 bOK = TrackLocalMap();
 
             }
-            if(!bOK)
+            if(!bOK) // tracking fail
                 cout << "Fail to track local map!" << endl;
         }
-        else
+        else // tracking만 수행, mapping 비활성화
         {
             // mbVO true means that there are few matches to MapPoints in the map. We cannot retrieve
             // a local map and therefore we do not perform TrackLocalMap(). Once the system relocalizes
@@ -2140,10 +2212,13 @@ void Tracking::Track()
         }
 
         if(bOK)
+        {
+            // cout << "mState is OK" << endl;
             mState = OK;
+        }
         else if (mState == OK)
         {
-            if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+            if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) // IMU 사용
             {
                 Verbose::PrintMess("Track lost for less than one second...", Verbose::VERBOSITY_NORMAL);
                 if(!pCurrentMap->isImuInitialized() || !pCurrentMap->GetIniertialBA2())
@@ -2155,7 +2230,10 @@ void Tracking::Track()
                 mState=RECENTLY_LOST;
             }
             else
+            {
+                cout << "mState change into RECENTLY_LOST" << endl;
                 mState=RECENTLY_LOST; // visual to lost
+            }
 
             /*if(mCurrentFrame.mnId>mnLastRelocFrameId+mMaxFrames)
             {*/
@@ -2199,23 +2277,29 @@ void Tracking::Track()
 
         // Update drawer
         mpFrameDrawer->Update(this);
-        if(mCurrentFrame.isSet())
-            mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.GetPose());
-
-        if(bOK || mState==RECENTLY_LOST)
+        if(mCurrentFrame.isSet()) // 현재 프레임이 설정되어 있으면, map drawer에 카메라의 pose를 설정
         {
+            mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.GetPose());
+            // cout << "update drawer1" << endl;
+        }
+
+        if(bOK || mState==RECENTLY_LOST) // success 혹은 RECENTLY_LOST 상태일 때만 실행
+        {
+            // cout << "update drawer2" << endl;
             // Update motion model
             if(mLastFrame.isSet() && mCurrentFrame.isSet())
             {
+                // cout << "all frame set" << endl;
                 Sophus::SE3f LastTwc = mLastFrame.GetPose().inverse();
                 mVelocity = mCurrentFrame.GetPose() * LastTwc;
                 mbVelocity = true;
             }
             else {
+                // cout << "not all frame set" << endl;
                 mbVelocity = false;
             }
 
-            if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+            if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) // IMU 사용
                 mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.GetPose());
 
             // Clean VO matches
@@ -2270,12 +2354,12 @@ void Tracking::Track()
         // Reset if the camera get lost soon after initialization
         if(mState==LOST)
         {
-            if(pCurrentMap->KeyFramesInMap()<=10)
+            if(pCurrentMap->KeyFramesInMap()<=10) // KeyFrame의 수가 10개 이하면 맵 초기화
             {
                 mpSystem->ResetActiveMap();
                 return;
             }
-            if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+            if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) // IMU 사용
                 if (!pCurrentMap->isImuInitialized())
                 {
                     Verbose::PrintMess("Track lost before IMU initialisation, reseting...", Verbose::VERBOSITY_QUIET);
@@ -2283,6 +2367,7 @@ void Tracking::Track()
                     return;
                 }
 
+            cout << "CreateMapInAtlas4" << endl; // 맵에 키 프레임이 충분히 있으므로, 기존 맵을 유지, 새로운 맵을 생성
             CreateMapInAtlas();
 
             return;
@@ -2302,6 +2387,7 @@ void Tracking::Track()
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
         if(mCurrentFrame.isSet())
         {
+            // cout << "mState: OK" << endl;
             Sophus::SE3f Tcr_ = mCurrentFrame.GetPose() * mCurrentFrame.mpReferenceKF->GetPoseInverse();
             mlRelativeFramePoses.push_back(Tcr_);
             mlpReferences.push_back(mCurrentFrame.mpReferenceKF);
@@ -2310,6 +2396,7 @@ void Tracking::Track()
         }
         else
         {
+            // cout << "mState: RECENTLY_LOST" << endl;
             // This can happen if tracking is lost
             mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
             mlpReferences.push_back(mlpReferences.back());
@@ -2728,8 +2815,9 @@ bool Tracking::TrackReferenceKeyFrame()
     vector<MapPoint*> vpMapPointMatches;
 
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
+    cout << "nmatchtes: " << nmatches << endl; // matching 된 맵 포인트의 수를 nmatches로 반환
 
-    if(nmatches<15)
+    if(nmatches<9)
     {
         cout << "TRACK_REF_KF: Less than 15 matches!!\n";
         return false;
@@ -2953,22 +3041,23 @@ bool Tracking::TrackLocalMap()
     // We retrieve the local map and try to find matches to points in the local map.
     mTrackedFr++;
 
-    UpdateLocalMap();
-    SearchLocalPoints();
+    UpdateLocalMap(); // 로컬 맵 업데이트
+    SearchLocalPoints(); // 로컬 맵 내의 맵 포인트와 현재 프레임의 특징점 매칭
 
     // TOO check outliers before PO
     int aux1 = 0, aux2=0;
     for(int i=0; i<mCurrentFrame.N; i++)
         if( mCurrentFrame.mvpMapPoints[i])
         {
-            aux1++;
+            aux1++; // 현재 프레임의 매칭된 맵 포인트
             if(mCurrentFrame.mvbOutlier[i])
-                aux2++;
+                aux2++; // 아웃라이어 맵 포인트
         }
 
     int inliers;
-    if (!mpAtlas->isImuInitialized())
-        Optimizer::PoseOptimization(&mCurrentFrame);
+    // 포즈 최적화 수행
+    if (!mpAtlas->isImuInitialized()) // IMU 미초기화
+        Optimizer::PoseOptimization(&mCurrentFrame); // 단순히 카메라 포즈 최적화 수행
     else
     {
         if(mCurrentFrame.mnId<=mnLastRelocFrameId+mnFramesToResetIMU)
@@ -2992,6 +3081,7 @@ bool Tracking::TrackLocalMap()
         }
     }
 
+    // 최적화 이후 outlier 한 번 더 제거
     aux1 = 0, aux2 = 0;
     for(int i=0; i<mCurrentFrame.N; i++)
         if( mCurrentFrame.mvpMapPoints[i])
@@ -3027,7 +3117,8 @@ bool Tracking::TrackLocalMap()
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
-    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
+    cout << mnMatchesInliers << endl;
+    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50) // inlier 수가 50미만일 경우 tracking fail
         return false;
 
     if((mnMatchesInliers>10)&&(mState==RECENTLY_LOST))
@@ -3610,18 +3701,20 @@ bool Tracking::Relocalization()
 {
     Verbose::PrintMess("Starting relocalization", Verbose::VERBOSITY_NORMAL);
     // Compute Bag of Words Vector
-    mCurrentFrame.ComputeBoW();
+    mCurrentFrame.ComputeBoW(); // 현재 이미지의 feature를 BoW로 변환
 
     // Relocalization is performed when tracking is lost
     // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
     vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurrentFrame, mpAtlas->GetCurrentMap());
 
     if(vpCandidateKFs.empty()) {
+        cout << "fail with no candidates" << endl;
         Verbose::PrintMess("There are not candidates", Verbose::VERBOSITY_NORMAL);
         return false;
     }
 
-    const int nKFs = vpCandidateKFs.size();
+    const int nKFs = vpCandidateKFs.size(); // 후보 key frame의 수
+    // cout << "nKFs: " << nKFs << endl;
 
     // We perform first an ORB matching with each candidate
     // If enough matches are found we setup a PnP solver
@@ -3638,20 +3731,21 @@ bool Tracking::Relocalization()
 
     int nCandidates=0;
 
-    for(int i=0; i<nKFs; i++)
+    for(int i=0; i<nKFs; i++) // 각 후보 key frame에 대해 체크
     {
         KeyFrame* pKF = vpCandidateKFs[i];
         if(pKF->isBad())
             vbDiscarded[i] = true;
         else
         {
-            int nmatches = matcher.SearchByBoW(pKF,mCurrentFrame,vvpMapPointMatches[i]);
-            if(nmatches<15)
+            int nmatches = matcher.SearchByBoW(pKF,mCurrentFrame,vvpMapPointMatches[i]); // point간의 매칭을 수행, 매칭된 map point를 vvpMapPointMatches[i]에 저장
+            // cout << "nmatches: " << nmatches << endl; 
+            if(nmatches<15) // 매칭점의 수가 15개 미만이면 keyframe 후보를 폐기
             {
                 vbDiscarded[i] = true;
                 continue;
             }
-            else
+            else // 매칭점이 충분하면, PnP solver를 생성하고 RANSAC 파라미터를 설정
             {
                 MLPnPsolver* pSolver = new MLPnPsolver(mCurrentFrame,vvpMapPointMatches[i]);
                 pSolver->SetRansacParameters(0.99,10,300,6,0.5,5.991);  //This solver needs at least 6 points
@@ -3663,14 +3757,14 @@ bool Tracking::Relocalization()
 
     // Alternatively perform some iterations of P4P RANSAC
     // Until we found a camera pose supported by enough inliers
-    bool bMatch = false;
+    bool bMatch = false; // relocalization 추정 성공 여부를 나타내는 플래그
     ORBmatcher matcher2(0.9,true);
 
-    while(nCandidates>0 && !bMatch)
+    while(nCandidates>0 && !bMatch) // 유효한 keyframe 후보가 남아있고, 아직 relocalization에 성공하지 못한 경우 루프 계속
     {
         for(int i=0; i<nKFs; i++)
         {
-            if(vbDiscarded[i])
+            if(vbDiscarded[i]) // 이미 폐기된 keyframe은 패스
                 continue;
 
             // Perform 5 Ransac Iterations
@@ -3683,16 +3777,17 @@ bool Tracking::Relocalization()
             bool bTcw = pSolver->iterate(5,bNoMore,vbInliers,nInliers, eigTcw);
 
             // If Ransac reachs max. iterations discard keyframe
-            if(bNoMore)
+            if(bNoMore) // 최대 RANSAC에 도달 시, PnP solver가 더 이상 유의미한 inlier를 찾을 수 없다고 판단.
             {
                 vbDiscarded[i]=true;
                 nCandidates--;
             }
 
             // If a Camera Pose is computed, optimize
-            if(bTcw)
+            // cout << "bTcw: " << bTcw << endl;
+            if(bTcw) // PnP solver가 유의미한 카메라 포즈를 성공적으로 계산했는지 확인, true라면 최적화 과정 진행
             {
-                Sophus::SE3f Tcw(eigTcw);
+                Sophus::SE3f Tcw(eigTcw); // eigTcw는 4*4변환 행렬 PnP solver에 의해 추정된 카메라 포즈를 담고 있음, SE3 클래스로 회전 R과 t를 포함
                 mCurrentFrame.SetPose(Tcw);
                 // Tcw.copyTo(mCurrentFrame.mTcw);
 
@@ -3711,7 +3806,7 @@ bool Tracking::Relocalization()
                         mCurrentFrame.mvpMapPoints[j]=NULL;
                 }
 
-                int nGood = Optimizer::PoseOptimization(&mCurrentFrame);
+                int nGood = Optimizer::PoseOptimization(&mCurrentFrame); // Bundle Adjustment를 진행
 
                 if(nGood<10)
                     continue;
@@ -3763,8 +3858,121 @@ bool Tracking::Relocalization()
         }
     }
 
-    if(!bMatch)
+    if(!bMatch) 
     {
+        cout << "Relocalize Fail..." << endl;
+        // 임시 변수에 복사하여 접근
+        std::vector<std::vector<Vec2>> localTextDete;
+        std::vector<TextInfo> localTextMean;
+        double localTframe;
+        {
+            std::lock_guard<std::mutex> lock(mTextMutex);
+            localTextDete = mTextDete;
+            localTextMean = mTextMean;
+            localTframe = mTframe;
+        }
+        std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
+
+        // TextDete 출력
+        std::cout << "TextDete:" << std::endl;
+        for (size_t i = 0; i < localTextDete.size(); ++i) {
+            cout << "  TextDete " << i << ":" << endl;
+            for (size_t j = 0; j < localTextDete[i].size(); ++j) {
+                cout << "Point " << j << ": (" << localTextDete[i][j].transpose() << ")" << endl;
+            }
+        }
+
+        // TextMean 출력
+        std::cout << "TextMean:" << std::endl;
+        for (size_t i = 0; i < localTextMean.size(); ++i) {
+            cout << "  TextInfo " << i << ":" << endl;
+            cout << "    Mean: " << localTextMean[i].mean << endl;
+            cout << "    Score: " << localTextMean[i].score << endl;
+        }
+
+        // // --- Fallback Method Starts Here ---
+        // // 현재 프레임의 detections에서 네 꼭지점의 좌표를 사용하여 PnP를 수행
+
+        // // 현재 프레임의 detections이 존재하는지 확인
+        // cout << "mCurrentFrame" << mCurrentFrame.vDetec.empty() << endl;
+        // if(mCurrentFrame.vDetec.empty() || mCurrentFrame.vDetec[0].size() < 4){
+        //     cerr << "Error: Not enough detection points for fallback relocalization." << endl;
+        //     return false;
+        // }
+
+        // // 4개의 점 추출 (예: 첫 번째 detection의 첫 네 점)
+        // std::vector<cv::Point2f> imagePoints;
+        // std::vector<cv::Point3f> objectPoints;
+
+        // // Detection이 하나라고 가정하고 첫 번째 detection에서 네 점 추출
+        // for(int i=0; i<4; i++){
+        //     Eigen::Matrix<double, 2, 1> pt = mCurrentFrame.vDetec[0][i];
+        //     imagePoints.emplace_back(cv::Point2f(pt[0], pt[1]));
+        // }
+
+        // // 대응하는 3D 객체 포인트 정의 (실제 환경에 맞게 수정 필요)
+        // // 예시: 평면 상의 네 점 (크기 1 단위)
+        // objectPoints.emplace_back(cv::Point3f(0.0f, 0.0f, 0.0f)); // 예: 왼쪽 상단
+        // objectPoints.emplace_back(cv::Point3f(1.0f, 0.0f, 0.0f)); // 예: 오른쪽 상단
+        // objectPoints.emplace_back(cv::Point3f(1.0f, 1.0f, 0.0f)); // 예: 오른쪽 하단
+        // objectPoints.emplace_back(cv::Point3f(0.0f, 1.0f, 0.0f)); // 예: 왼쪽 하단
+
+        // // 카메라 내적 파라미터 설정
+        // cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << 
+        //                          mCurrentFrame.fx, 0, mCurrentFrame.cx,
+        //                          0, mCurrentFrame.fy, mCurrentFrame.cy,
+        //                          0, 0, 1);
+
+        // // 왜곡 계수 (없다고 가정하면 0으로 설정)
+        // cv::Mat distCoeffs = cv::Mat::zeros(4,1, CV_64F);
+
+        // cv::Mat rvec, tvec;
+        // bool success = cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+
+        // if(success){
+        //     // 회전 벡터을 회전 행렬로 변환
+        //     cv::Mat R_cv;
+        //     cv::Rodrigues(rvec, R_cv);
+
+        //     // OpenCV Mat을 Eigen Matrix로 변환
+        //     Eigen::Matrix3f R;
+        //     R << R_cv.at<double>(0,0), R_cv.at<double>(0,1), R_cv.at<double>(0,2),
+        //          R_cv.at<double>(1,0), R_cv.at<double>(1,1), R_cv.at<double>(1,2),
+        //          R_cv.at<double>(2,0), R_cv.at<double>(2,1), R_cv.at<double>(2,2);
+
+        //     // 병진 벡터 변환
+        //     Eigen::Vector3f t;
+        //     t << tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2);
+
+        //     // 4x4 변환 행렬 구성
+        //     Eigen::Matrix4f Tcw = Eigen::Matrix4f::Identity();
+        //     Tcw.block<3,3>(0,0) = R;
+        //     Tcw.block<3,1>(0,3) = t;
+
+        //     // Sophus SE3 객체로 변환
+        //     Sophus::SE3f pose(Tcw);
+
+        //     // 현재 프레임에 포즈 설정
+        //     mCurrentFrame.SetPose(pose);
+
+        //     // 포즈 최적화 수행 (옵션)
+        //     int nGoodFallback = Optimizer::PoseOptimization(&mCurrentFrame); // 예: Bundle Adjustment
+
+        //     if(nGoodFallback >= 50){
+        //         cout << "Relocalized using 4-point fallback method!!" << endl;
+        //         mnLastRelocFrameId = mCurrentFrame.mnId;
+        //         return true;
+        //     }
+        //     else{
+        //         cout << "4-point fallback Pose Optimization failed" << endl;
+        //         return false;
+        //     }
+        // }
+        // else{
+        //     cout << "4-point fallback solvePnP failed" << endl;
+        //     return false;
+        // }
+        // // --- Fallback Method Ends Here ---
         return false;
     }
     else
@@ -3773,6 +3981,7 @@ bool Tracking::Relocalization()
         cout << "Relocalized!!" << endl;
         return true;
     }
+
 
 }
 

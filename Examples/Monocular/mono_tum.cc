@@ -24,11 +24,14 @@
 #include<opencv2/core/core.hpp>
 
 #include<System.h>
+#include <Tool.h>
 
-using namespace std;
+using namespace tool;
 
-void LoadImages(const string &strFile, vector<string> &vstrImageFilenames,
-                vector<double> &vTimestamps);
+std::vector<std::string> vstrImageFilenames;
+
+void LoadImages(const string &strFile, std::vector<string> &vstrImageFilenames,
+                std::vector<double> &vTimestamps);
 
 int main(int argc, char **argv)
 {
@@ -65,9 +68,37 @@ int main(int argc, char **argv)
     cv::Mat im;
     for(int ni=0; ni<nImages; ni++)
     {
+        // tool 싱글톤 인스턴스에 데이터 로드
+        std::string imagePath = string(argv[3]) + "/" + vstrImageFilenames[ni];
+        // cout << "imagePath:  " << imagePath << endl;
+        
+        // Declare temporary variables for detections and mean information
+        std::vector<vector<Eigen::Matrix<double,2,1>>> vTextDete;
+        std::vector<TextInfo> vTextMean;
+
+        tool::LoadTexts(imagePath, vTextDete, vTextMean);
+        assert(vTextDete.size()==vTextMean.size());
+        
+        // Detec 출력
+        // cout << "Frame " << vstrImageFilenames[ni] << " vTextDete 내용:" << vTextDete.size() << endl;
+        // for (size_t i = 0; i < vTextDete.size(); ++i) {
+        //     cout << "  Detec " << i << ":" << endl;
+        //     for (size_t j = 0; j < vTextDete[i].size(); ++j) {
+        //         cout << "Point " << j << ": (" << vTextDete[i][j].transpose() << ")" << endl;
+        //     }
+        // }
+        // vTextMean 출력
+        // cout << "Frame " << ni << " vTextMean 내용:" << vTextMean.size() << endl;
+        // for (size_t i = 0; i < vTextMean.size(); ++i) {
+        //     cout << "  TextInfo " << i << ":" << endl;
+        //     cout << "    Mean: " << vTextMean[i].mean << endl;
+        //     cout << "    Score: " << vTextMean[i].score << endl;
+        // }
+
         // Read image from file
         im = cv::imread(string(argv[3])+"/"+vstrImageFilenames[ni],cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
         double tframe = vTimestamps[ni];
+        // std::cout << std::fixed << std::setprecision(6) << vTimestamps[ni] << std::endl;
 
         if(im.empty())
         {
@@ -106,7 +137,7 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonocular(im,tframe);
+        SLAM.TrackMonocular_2(im,tframe,vTextDete,vTextMean);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -154,7 +185,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void LoadImages(const string &strFile, vector<string> &vstrImageFilenames, vector<double> &vTimestamps)
+void LoadImages(const string &strFile, std::vector<string> &vstrImageFilenames, std::vector<double> &vTimestamps)
 {
     ifstream f;
     f.open(strFile.c_str());

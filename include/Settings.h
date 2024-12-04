@@ -30,6 +30,13 @@
 #include <stdlib.h>
 #include <string>
 
+struct TextInfo
+{
+    std::string mean;    // 인식된 의미
+    double score;        // 인식 점수
+};
+
+
 namespace ORB_SLAM3 {
 
     class System;

@@ -85,6 +85,10 @@
         "__tree": "cpp",
         "queue": "cpp",
         "stack": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "cassert": "cpp",
+        "__bit_reference": "cpp",
+        "__string": "cpp",
+        "locale": "cpp"
     }
 }

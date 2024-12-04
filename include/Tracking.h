@@ -42,6 +42,10 @@
 #include <mutex>
 #include <unordered_set>
 
+#include <Eigen/Dense> // 헤더 파일 포함
+
+using Vec2 = Eigen::Matrix<double, 2, 1>; // Vec2 정의
+
 namespace ORB_SLAM3
 {
 
@@ -52,6 +56,8 @@ class LocalMapping;
 class LoopClosing;
 class System;
 class Settings;
+
+using namespace std;
 
 class Tracking
 {  
@@ -72,6 +78,11 @@ public:
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
     Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
     Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename);
+    Sophus::SE3f GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, const vector<vector<Vec2>> &TextDete, const vector<TextInfo> &TextMean);
+    double mTframe;
+    std::vector<std::vector<Vec2>> mTextDete;
+    std::vector<TextInfo> mTextMean;
+    std::mutex mTextMutex; // 뮤텍스 추가
 
     void GrabImuData(const IMU::Point &imuMeasurement);
 

@@ -40,6 +40,10 @@
 #include "ImuTypes.h"
 #include "Settings.h"
 
+#include <Eigen/Dense> // 헤더 파일 포함
+
+using Vec2 = Eigen::Matrix<double, 2, 1>; // Vec2 정의
+using namespace std;
 
 namespace ORB_SLAM3
 {
@@ -119,6 +123,7 @@ public:
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     Sophus::SE3f TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
+    Sophus::SE3f TrackMonocular_2(const cv::Mat &im, const double &timestamp, const vector<vector<Vec2> > &TextDete, const vector<TextInfo> &TextMean, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
 
 
     // This stops local mapping thread (map building) and performs only camera tracking.
