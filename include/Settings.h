@@ -30,12 +30,23 @@
 #include <stdlib.h>
 #include <string>
 
+using Vec2 = Eigen::Matrix<double, 2, 1>; // Vec2 정의
+
 struct TextInfo
 {
     std::string mean;    // 인식된 의미
     double score;        // 인식 점수
 };
 
+
+struct TextFrame {
+    std::string frame_name; // 예: "20001.123456"
+    std::vector<std::vector<Vec2>> text_dete;
+    std::vector<TextInfo> text_mean;
+};
+
+// 모든 프레임을 저장하는 맵
+// std::unordered_map<std::string, TextFrame> frame_map;
 
 namespace ORB_SLAM3 {
 
