@@ -29,6 +29,8 @@
 #include "MLPnPsolver.h"
 #include "GeometricTools.h"
 #include "Tool.h"
+#include "Text.h"
+#include "Settings.h"
 
 #include <iostream>
 
@@ -3873,106 +3875,70 @@ bool Tracking::Relocalization()
         }
         std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
 
-        // TextDete 출력
-        std::cout << "TextDete:" << std::endl;
-        for (size_t i = 0; i < localTextDete.size(); ++i) {
-            cout << "  TextDete " << i << ":" << endl;
-            for (size_t j = 0; j < localTextDete[i].size(); ++j) {
-                cout << "Point " << j << ": (" << localTextDete[i][j].transpose() << ")" << endl;
+        // // TextDete 출력
+        // std::cout << "TextDete:" << std::endl;
+        // for (size_t i = 0; i < localTextDete.size(); ++i) {
+        //     cout << "  TextDete " << i << ":" << endl;
+        //     for (size_t j = 0; j < localTextDete[i].size(); ++j) {
+        //         cout << "Point " << j << ": (" << localTextDete[i][j].transpose() << ")" << endl;
+        //     }
+        // }
+
+        // // TextMean 출력
+        // std::cout << "TextMean:" << std::endl;
+        // for (size_t i = 0; i < localTextMean.size(); ++i) {
+        //     cout << "  TextInfo " << i << ":" << endl;
+        //     cout << "    Mean: " << localTextMean[i].mean << endl;
+        //     cout << "    Score: " << localTextMean[i].score << endl;
+        // }
+
+        // TextFrame 배열에 추가
+        TextFrame tf;
+        if(!localTextDete.empty()) 
+        {
+            tf.frame_name = std::to_string(localTframe);
+            tf.text_dete = localTextDete;
+            tf.text_mean = localTextMean;
+
+            // 멤버 변수에 접근할 때는 뮤텍스 잠금 필요 (멀티스레드 환경일 경우)
+            {
+                std::lock_guard<std::mutex> lock(mTextFrameMutex);
+                textFrameArray.push_back(tf); // push_back 사용
             }
+
         }
 
-        // TextMean 출력
-        std::cout << "TextMean:" << std::endl;
-        for (size_t i = 0; i < localTextMean.size(); ++i) {
-            cout << "  TextInfo " << i << ":" << endl;
-            cout << "    Mean: " << localTextMean[i].mean << endl;
-            cout << "    Score: " << localTextMean[i].score << endl;
+        // textFrameArray 내부의 모든 값을 출력
+        {
+            std::lock_guard<std::mutex> lock(mTextFrameMutex);
+            std::cout << "=== TextFrameArray 내용 ===" << std::endl;
+            std::cout << "size: " << textFrameArray.size() << std::endl;
+            // for (size_t i = 0; i < textFrameArray.size(); ++i) {
+            //     const TextFrame& currentFrame = textFrameArray[i];
+            //     std::cout << "TextFrame " << i << ":" << std::endl;
+            //     std::cout << "  Frame Name: " << currentFrame.frame_name << std::endl;
+                
+            //     // text_dete 출력
+            //     std::cout << "  TextDete:" << std::endl;
+            //     for (size_t j = 0; j < currentFrame.text_dete.size(); ++j) {
+            //         std::cout << "    Detection " << j << ":" << std::endl;
+            //         for (size_t k = 0; k < currentFrame.text_dete[j].size(); ++k) {
+            //             std::cout << "      Point " << k << ": (" 
+            //                       << currentFrame.text_dete[j][k].transpose() << ")" << std::endl;
+            //         }
+            //     }
+                
+            //     // text_mean 출력
+            //     std::cout << "  TextMean:" << std::endl;
+            //     for (size_t j = 0; j < currentFrame.text_mean.size(); ++j) {
+            //         std::cout << "    TextInfo " << j << ":" << std::endl;
+            //         std::cout << "      Mean: " << currentFrame.text_mean[j].mean << std::endl;
+            //         std::cout << "      Score: " << currentFrame.text_mean[j].score << std::endl;
+            //     }
+            // }
+            std::cout << "============================" << std::endl;
         }
 
-        // // --- Fallback Method Starts Here ---
-        // // 현재 프레임의 detections에서 네 꼭지점의 좌표를 사용하여 PnP를 수행
-
-        // // 현재 프레임의 detections이 존재하는지 확인
-        // cout << "mCurrentFrame" << mCurrentFrame.vDetec.empty() << endl;
-        // if(mCurrentFrame.vDetec.empty() || mCurrentFrame.vDetec[0].size() < 4){
-        //     cerr << "Error: Not enough detection points for fallback relocalization." << endl;
-        //     return false;
-        // }
-
-        // // 4개의 점 추출 (예: 첫 번째 detection의 첫 네 점)
-        // std::vector<cv::Point2f> imagePoints;
-        // std::vector<cv::Point3f> objectPoints;
-
-        // // Detection이 하나라고 가정하고 첫 번째 detection에서 네 점 추출
-        // for(int i=0; i<4; i++){
-        //     Eigen::Matrix<double, 2, 1> pt = mCurrentFrame.vDetec[0][i];
-        //     imagePoints.emplace_back(cv::Point2f(pt[0], pt[1]));
-        // }
-
-        // // 대응하는 3D 객체 포인트 정의 (실제 환경에 맞게 수정 필요)
-        // // 예시: 평면 상의 네 점 (크기 1 단위)
-        // objectPoints.emplace_back(cv::Point3f(0.0f, 0.0f, 0.0f)); // 예: 왼쪽 상단
-        // objectPoints.emplace_back(cv::Point3f(1.0f, 0.0f, 0.0f)); // 예: 오른쪽 상단
-        // objectPoints.emplace_back(cv::Point3f(1.0f, 1.0f, 0.0f)); // 예: 오른쪽 하단
-        // objectPoints.emplace_back(cv::Point3f(0.0f, 1.0f, 0.0f)); // 예: 왼쪽 하단
-
-        // // 카메라 내적 파라미터 설정
-        // cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << 
-        //                          mCurrentFrame.fx, 0, mCurrentFrame.cx,
-        //                          0, mCurrentFrame.fy, mCurrentFrame.cy,
-        //                          0, 0, 1);
-
-        // // 왜곡 계수 (없다고 가정하면 0으로 설정)
-        // cv::Mat distCoeffs = cv::Mat::zeros(4,1, CV_64F);
-
-        // cv::Mat rvec, tvec;
-        // bool success = cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
-
-        // if(success){
-        //     // 회전 벡터을 회전 행렬로 변환
-        //     cv::Mat R_cv;
-        //     cv::Rodrigues(rvec, R_cv);
-
-        //     // OpenCV Mat을 Eigen Matrix로 변환
-        //     Eigen::Matrix3f R;
-        //     R << R_cv.at<double>(0,0), R_cv.at<double>(0,1), R_cv.at<double>(0,2),
-        //          R_cv.at<double>(1,0), R_cv.at<double>(1,1), R_cv.at<double>(1,2),
-        //          R_cv.at<double>(2,0), R_cv.at<double>(2,1), R_cv.at<double>(2,2);
-
-        //     // 병진 벡터 변환
-        //     Eigen::Vector3f t;
-        //     t << tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2);
-
-        //     // 4x4 변환 행렬 구성
-        //     Eigen::Matrix4f Tcw = Eigen::Matrix4f::Identity();
-        //     Tcw.block<3,3>(0,0) = R;
-        //     Tcw.block<3,1>(0,3) = t;
-
-        //     // Sophus SE3 객체로 변환
-        //     Sophus::SE3f pose(Tcw);
-
-        //     // 현재 프레임에 포즈 설정
-        //     mCurrentFrame.SetPose(pose);
-
-        //     // 포즈 최적화 수행 (옵션)
-        //     int nGoodFallback = Optimizer::PoseOptimization(&mCurrentFrame); // 예: Bundle Adjustment
-
-        //     if(nGoodFallback >= 50){
-        //         cout << "Relocalized using 4-point fallback method!!" << endl;
-        //         mnLastRelocFrameId = mCurrentFrame.mnId;
-        //         return true;
-        //     }
-        //     else{
-        //         cout << "4-point fallback Pose Optimization failed" << endl;
-        //         return false;
-        //     }
-        // }
-        // else{
-        //     cout << "4-point fallback solvePnP failed" << endl;
-        //     return false;
-        // }
-        // // --- Fallback Method Ends Here ---
         return false;
     }
     else

@@ -87,6 +87,7 @@ src/TwoViewReconstruction.cc
 src/Config.cc
 src/Settings.cc
 src/Tool.cc
+src/Text.cc
 include/System.h
 include/Tracking.h
 include/LocalMapping.h
@@ -117,7 +118,8 @@ include/TwoViewReconstruction.h
 include/SerializationUtils.h
 include/Config.h
 include/Settings.h
-include/Tool.h)
+include/Tool.h
+include/Text.h)
 
 add_subdirectory(Thirdparty/g2o)
 
