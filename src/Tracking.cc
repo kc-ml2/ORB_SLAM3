@@ -1619,13 +1619,14 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
 }
 
 
-Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, const vector<vector<Vec2>> &TextDete, const vector<TextInfo> &TextMean)
+Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray)
 {
     {
         std::lock_guard<std::mutex> lock(mTextMutex);
-        mTextDete = TextDete;
-        mTextMean = TextMean;
-        mTframe = timestamp;
+        mTextDete = textFrameArray[ni].text_dete;
+        mTextMean = textFrameArray[ni].text_mean;
+        mTframe = textFrameArray[ni].frame_name;
+        mNi = ni;
     }
     mImGray = im;
     if(mImGray.channels()==3)
@@ -3863,81 +3864,24 @@ bool Tracking::Relocalization()
     if(!bMatch) 
     {
         cout << "Relocalize Fail..." << endl;
-        // 임시 변수에 복사하여 접근
-        std::vector<std::vector<Vec2>> localTextDete;
-        std::vector<TextInfo> localTextMean;
-        double localTframe;
-        {
-            std::lock_guard<std::mutex> lock(mTextMutex);
-            localTextDete = mTextDete;
-            localTextMean = mTextMean;
-            localTframe = mTframe;
-        }
-        std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
-
+        std::cout << "frame_name: " << mTframe << std::endl;
         // // TextDete 출력
         // std::cout << "TextDete:" << std::endl;
-        // for (size_t i = 0; i < localTextDete.size(); ++i) {
+        // for (size_t i = 0; i < mTextDete.size(); ++i) {
         //     cout << "  TextDete " << i << ":" << endl;
-        //     for (size_t j = 0; j < localTextDete[i].size(); ++j) {
-        //         cout << "Point " << j << ": (" << localTextDete[i][j].transpose() << ")" << endl;
+        //     for (size_t j = 0; j < mTextDete[i].size(); ++j) {
+        //         cout << "Point " << j << ": (" << mTextDete[i][j].transpose() << ")" << endl;
         //     }
         // }
 
         // // TextMean 출력
         // std::cout << "TextMean:" << std::endl;
-        // for (size_t i = 0; i < localTextMean.size(); ++i) {
+        // for (size_t i = 0; i < mTextMean.size(); ++i) {
         //     cout << "  TextInfo " << i << ":" << endl;
-        //     cout << "    Mean: " << localTextMean[i].mean << endl;
-        //     cout << "    Score: " << localTextMean[i].score << endl;
+        //     cout << "    Mean: " << mTextMean[i].mean << endl;
+        //     cout << "    Score: " << mTextMean[i].score << endl;
         // }
 
-        // TextFrame 배열에 추가
-        TextFrame tf;
-        if(!localTextDete.empty()) 
-        {
-            tf.frame_name = std::to_string(localTframe);
-            tf.text_dete = localTextDete;
-            tf.text_mean = localTextMean;
-
-            // 멤버 변수에 접근할 때는 뮤텍스 잠금 필요 (멀티스레드 환경일 경우)
-            {
-                std::lock_guard<std::mutex> lock(mTextFrameMutex);
-                textFrameArray.push_back(tf); // push_back 사용
-            }
-
-        }
-
-        // textFrameArray 내부의 모든 값을 출력
-        {
-            std::lock_guard<std::mutex> lock(mTextFrameMutex);
-            std::cout << "=== TextFrameArray 내용 ===" << std::endl;
-            std::cout << "size: " << textFrameArray.size() << std::endl;
-            // for (size_t i = 0; i < textFrameArray.size(); ++i) {
-            //     const TextFrame& currentFrame = textFrameArray[i];
-            //     std::cout << "TextFrame " << i << ":" << std::endl;
-            //     std::cout << "  Frame Name: " << currentFrame.frame_name << std::endl;
-                
-            //     // text_dete 출력
-            //     std::cout << "  TextDete:" << std::endl;
-            //     for (size_t j = 0; j < currentFrame.text_dete.size(); ++j) {
-            //         std::cout << "    Detection " << j << ":" << std::endl;
-            //         for (size_t k = 0; k < currentFrame.text_dete[j].size(); ++k) {
-            //             std::cout << "      Point " << k << ": (" 
-            //                       << currentFrame.text_dete[j][k].transpose() << ")" << std::endl;
-            //         }
-            //     }
-                
-            //     // text_mean 출력
-            //     std::cout << "  TextMean:" << std::endl;
-            //     for (size_t j = 0; j < currentFrame.text_mean.size(); ++j) {
-            //         std::cout << "    TextInfo " << j << ":" << std::endl;
-            //         std::cout << "      Mean: " << currentFrame.text_mean[j].mean << std::endl;
-            //         std::cout << "      Score: " << currentFrame.text_mean[j].score << std::endl;
-            //     }
-            // }
-            std::cout << "============================" << std::endl;
-        }
 
         return false;
     }

@@ -475,7 +475,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
     return Tcw;
 }
 
-Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp, const vector<vector<Vec2>> &TextDete, const vector<TextInfo> &TextMean, const vector<IMU::Point>& vImuMeas, string filename)
+Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp, int ni, const vector<TextFrame> textFrameArray, const vector<IMU::Point>& vImuMeas, string filename)
 {
 
     {
@@ -542,7 +542,7 @@ Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular_2(imToFeed, timestamp, filename, TextDete, TextMean);
+    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular_2(imToFeed, timestamp, filename, ni, textFrameArray);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
