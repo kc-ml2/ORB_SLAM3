@@ -38,15 +38,17 @@ struct TextInfo
     double score;        // 인식 점수
 };
 
-
 struct TextFrame {
-    std::string frame_name; // 예: "20001.123456"
+    double frame_name; // 예: "20001.123456"
     std::vector<std::vector<Vec2>> text_dete;
     std::vector<TextInfo> text_mean;
 };
 
-// 모든 프레임을 저장하는 맵
-// std::unordered_map<std::string, TextFrame> frame_map;
+// ProminentSign 구조체 정의
+struct ProminentSignMap {
+    std::string canonical_word;          // 대표 단어
+    std::vector<TextFrame> detections;   // 각 감지된 단어와 해당 프레임 이름의 리스트
+};
 
 namespace ORB_SLAM3 {
 

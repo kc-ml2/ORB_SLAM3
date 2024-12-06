@@ -19,6 +19,7 @@
 
 
 #include "System.h"
+#include "Settings.h"
 #include "Converter.h"
 #include <thread>
 #include <pangolin/pangolin.h>
@@ -475,7 +476,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
     return Tcw;
 }
 
-Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp, int ni, const vector<TextFrame> textFrameArray, const vector<IMU::Point>& vImuMeas, string filename)
+Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp, int ni, const vector<TextFrame> textFrameArray, const std::vector<ProminentSignMap> ProminentSignMapList, const vector<IMU::Point>& vImuMeas, string filename)
 {
 
     {
@@ -542,7 +543,7 @@ Sophus::SE3f System::TrackMonocular_2(const cv::Mat &im, const double &timestamp
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular_2(imToFeed, timestamp, filename, ni, textFrameArray);
+    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular_2(imToFeed, timestamp, filename, ni, textFrameArray, ProminentSignMapList);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;

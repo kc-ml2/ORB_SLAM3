@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cfloat>
 #include <iostream>
+#include <Settings.h>
 
 using namespace std;
 
@@ -180,6 +181,43 @@ void LoadTexts(const string &Path, std::vector<std::vector<Eigen::Matrix<double,
 
 }
 
+// Levenshtein 거리 계산 함수
+double LevenshteinDist(const string &str1in, const string &str2in)
+{
+    double dist;
+    int len1 = (int)str1in.length(), len2 = (int)str2in.length();
+    char str1[len1+1], str2[len2+1];
+    str1in.copy(str1, len1, 0);
+    str2in.copy(str2, len2, 0);
+    *(str1+len1)='\0';
+    *(str2+len2)='\0';
+
+    int dp[len1+1][len2+1];
+    for(size_t iraw=0; iraw<=len1; iraw++){
+        for(size_t icol=0; icol<=len2; icol++){
+            dp[iraw][icol] = 0;
+        }
+    }
+
+    for(int i=1; i<=len1; i++){
+        dp[i][0] = i;
+    }
+    for(int j=1; j<=len2; j++){
+        dp[0][j] = j;
+    }
+    for(int irow=1; irow<=len1; irow++){
+        for(int icol=1; icol<=len2; icol++){
+            if(str1[irow-1]==str2[icol-1]){
+                dp[irow][icol] = dp[irow-1][icol-1];
+            }else{
+                dp[irow][icol] = min(dp[irow-1][icol-1], min(dp[irow][icol-1], dp[irow-1][icol]))+1;
+            }
+        }
+    }
+
+    dist = dp[len1][len2];
+    return dist;
+}
 
 void GetDeteInfo(const std::vector<Eigen::Matrix<double,2,1>> &vDetecRaw, std::vector<std::vector<Eigen::Matrix<double,2,1>>> &vDetec)
 {
@@ -237,3 +275,4 @@ size_t get_utf8_char_len(const char & byte)
 }
 
 } // namespace tool
+
