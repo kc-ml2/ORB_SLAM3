@@ -35,6 +35,9 @@ std::vector<TextFrame> textFrameArray;
 std::mutex mTextFrameMutex;
 std::mutex mTextMutex; // 뮤텍스 추가
 
+// ProminentSignMap 선언
+std::vector<ProminentSignMap> ProminentSignMapList;
+std::mutex mProminentSignMutex;
 
 void LoadImages(const string &strFile, std::vector<string> &vstrImageFilenames,
                 std::vector<double> &vTimestamps);
@@ -70,6 +73,9 @@ int main(int argc, char **argv)
     double t_resize = 0.f;
     double t_track = 0.f;
 
+    // Levenshtein 거리 임계값 정의
+    const int LEVENSHTEIN_THRESHOLD = 3;
+
     // Main loop
     cv::Mat im;
     for(int ni=0; ni<nImages; ni++)
@@ -99,7 +105,7 @@ int main(int argc, char **argv)
 
         // TextFrame 배열에 추가
         TextFrame tf;
-        tf.frame_name = std::to_string(localTframe);
+        tf.frame_name = localTframe;
         tf.text_dete = localTextDete;
         tf.text_mean = localTextMean;
 
@@ -109,14 +115,46 @@ int main(int argc, char **argv)
             textFrameArray.push_back(tf); // push_back 사용
         }
 
-        // textFrameArray 내부의 모든 값을 출력
-        // {
-        //     std::lock_guard<std::mutex> lock(mTextFrameMutex);
-        //     std::cout << "=== TextFrameArray 내용 ===" << std::endl;
-        //     std::cout << "size: " << textFrameArray.size() << std::endl;
-            
-        //     std::cout << "============================" << std::endl;
-        // }
+        // ** ProminentSignMap 업데이트 시작 **
+        {
+            std::lock_guard<std::mutex> lock(mProminentSignMutex);
+
+            for(const auto& textInfo : localTextMean)
+            {
+                const std::string& detectedWord = textInfo.mean;
+                int minDistance = INT32_MAX;
+                size_t bestMatchIndex = ProminentSignMapList.size(); // 초기값은 리스트 크기 (매칭 없음)
+
+                // 기존 canonical_word와의 거리 계산
+                for(size_t i = 0; i < ProminentSignMapList.size(); ++i)
+                {
+                    int distance = static_cast<int>(tool::LevenshteinDist(detectedWord, ProminentSignMapList[i].canonical_word));
+                    if(distance < minDistance)
+                    {
+                        minDistance = distance;
+                        bestMatchIndex = i;
+                    }
+
+                    // 정확한 매칭이 있으면 조기 종료
+                    if(distance == 0)
+                        break;
+                }
+
+                if(minDistance > LEVENSHTEIN_THRESHOLD || bestMatchIndex == ProminentSignMapList.size())
+                {
+                    // 유사한 단어가 없을 경우 새로운 ProminentSignMap 항목 생성
+                    ProminentSignMap newSign;
+                    newSign.canonical_word = detectedWord;
+                    newSign.detections.push_back(tf); // 현재 TextFrame과 연관
+                    ProminentSignMapList.push_back(newSign);
+                }
+                else
+                {
+                    // 유사한 단어가 존재할 경우 기존 항목에 현재 TextFrame 추가
+                    ProminentSignMapList[bestMatchIndex].detections.push_back(tf);
+                }
+            }
+        }
         
         // Read image from file
         im = cv::imread(string(argv[3])+"/"+vstrImageFilenames[ni],cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
@@ -160,7 +198,7 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonocular_2(im,tframe,ni,textFrameArray);
+        SLAM.TrackMonocular_2(im,tframe,ni,textFrameArray,ProminentSignMapList);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -188,41 +226,33 @@ int main(int argc, char **argv)
             usleep((T-ttrack)*1e6);
     }
 
-    {
-        // std::lock_guard<std::mutex> lock(mTextFrameMutex);
-        // std::cout << "=== TextFrameArray 내용 ===" << std::endl;
-        // std::cout << "size: " << textFrameArray.size() << std::endl;
-        // for (size_t i = 0; i < textFrameArray.size(); ++i) {
-        //     const TextFrame& currentFrame = textFrameArray[i];
-        //     std::cout << "TextFrame " << i << ":" << std::endl;
-        //     std::cout << "  Frame Name: " << currentFrame.frame_name << std::endl;
-            
-        //     // text_dete 출력
-        //     std::cout << "  TextDete:" << std::endl;
-        //     for (size_t j = 0; j < currentFrame.text_dete.size(); ++j) {
-        //         std::cout << "    Detection " << j << ":" << std::endl;
-        //         for (size_t k = 0; k < currentFrame.text_dete[j].size(); ++k) {
-        //             std::cout << "      Point " << k << ": (" 
-        //                       << currentFrame.text_dete[j][k].transpose() << ")" << std::endl;
-        //         }
-        //     }
-            
-        //     // text_mean 출력
-        //     std::cout << "  TextMean:" << std::endl;
-        //     for (size_t j = 0; j < currentFrame.text_mean.size(); ++j) {
-        //         std::cout << "    TextInfo " << j << ":" << std::endl;
-        //         std::cout << "      Mean: " << currentFrame.text_mean[j].mean << std::endl;
-        //         std::cout << "      Score: " << currentFrame.text_mean[j].score << std::endl;
-        //     }
-        // }
-
-
-        // std::cout << "============================" << std::endl;
-    }
-
     // Stop all threads
     SLAM.Shutdown();
 
+    {
+    std::lock_guard<std::mutex> lock(mProminentSignMutex);
+    std::ofstream outFile("ProminentSignMapList.txt");
+    if(outFile.is_open())
+    {
+        for(const auto& sign : ProminentSignMapList)
+        {
+            outFile << "Canonical Word: " << sign.canonical_word << "\n";
+            outFile << "Detections:\n";
+            for(const auto& detection : sign.detections)
+            {
+                outFile << "  Frame Name: " << detection.frame_name 
+                        << ", Score: " << detection.text_mean[0].score << "\n"; // 필요에 따라 조정
+            }
+            outFile << "-------------------------\n";
+        }
+        outFile.close();
+        std::cout << "ProminentSignMapList가 ProminentSignMapList.txt에 저장되었습니다." << std::endl;
+    }
+    else
+    {
+        std::cerr << "ProminentSignMapList.txt 파일을 열 수 없습니다." << std::endl;
+    }
+}
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());
     float totaltime = 0;

@@ -127,7 +127,7 @@ public:
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     Sophus::SE3f TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
-    Sophus::SE3f TrackMonocular_2(const cv::Mat &im, const double &timestamp, int ni, const vector<TextFrame> textFrameArray, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
+    Sophus::SE3f TrackMonocular_2(const cv::Mat &im, const double &timestamp, int ni, const vector<TextFrame> textFrameArray, const std::vector<ProminentSignMap> ProminentSignMapList, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
 
 
     // This stops local mapping thread (map building) and performs only camera tracking.

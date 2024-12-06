@@ -66,6 +66,17 @@ public:
     std::vector<TextFrame> textFrameArray;
     std::mutex mTextFrameMutex;
 
+    // ProminentSignMap 선언
+    std::vector<ProminentSignMap> mProminentSignMapList;
+    std::mutex mProminentSignMutex;
+
+    double mTframe;
+    int mNi;
+    std::vector<std::vector<Vec2>> mTextDete;
+    std::vector<TextInfo> mTextMean;
+    std::mutex mTextMutex;
+
+
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, Settings* settings, const string &_nameSeq=std::string());
@@ -81,12 +92,7 @@ public:
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
     Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
     Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray);
-    string mTframe;
-    int mNi;
-    std::vector<std::vector<Vec2>> mTextDete;
-    std::vector<TextInfo> mTextMean;
-    std::mutex mTextMutex; // 뮤텍스 추가
+    Sophus::SE3f GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray, const std::vector<ProminentSignMap> ProminentSignMapList);
 
     void GrabImuData(const IMU::Point &imuMeasurement);
 

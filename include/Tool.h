@@ -12,6 +12,7 @@
 namespace tool {
 
 void LoadTexts(const std::string &Path, std::vector<std::vector<Eigen::Matrix<double,2,1>>> &vDetec, std::vector<TextInfo> &vMean);
+double LevenshteinDist(const std::string &str1in, const std::string &str2in);
 
 class tool
 {

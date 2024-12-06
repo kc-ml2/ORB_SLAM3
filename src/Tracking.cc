@@ -1619,7 +1619,7 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
 }
 
 
-Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray)
+Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray, const std::vector<ProminentSignMap> ProminentSignMapList) 
 {
     {
         std::lock_guard<std::mutex> lock(mTextMutex);
@@ -1627,6 +1627,10 @@ Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &tim
         mTextMean = textFrameArray[ni].text_mean;
         mTframe = textFrameArray[ni].frame_name;
         mNi = ni;
+    }
+    {
+        std::lock_guard<std::mutex> lock(mProminentSignMutex);
+        mProminentSignMapList = ProminentSignMapList;
     }
     mImGray = im;
     if(mImGray.channels()==3)
@@ -3864,24 +3868,76 @@ bool Tracking::Relocalization()
     if(!bMatch) 
     {
         cout << "Relocalize Fail..." << endl;
-        std::cout << "frame_name: " << mTframe << std::endl;
-        // // TextDete 출력
-        // std::cout << "TextDete:" << std::endl;
-        // for (size_t i = 0; i < mTextDete.size(); ++i) {
-        //     cout << "  TextDete " << i << ":" << endl;
-        //     for (size_t j = 0; j < mTextDete[i].size(); ++j) {
-        //         cout << "Point " << j << ": (" << mTextDete[i][j].transpose() << ")" << endl;
-        //     }
-        // }
+        if(!mTextMean.empty())
+        {
+            // 상수 정의
+            const int LEVENSHTEIN_THRESHOLD = 3; // 유사성 임계값
+            const double TIME_WINDOW = 3.0; // 시간 창 (초)
 
-        // // TextMean 출력
-        // std::cout << "TextMean:" << std::endl;
-        // for (size_t i = 0; i < mTextMean.size(); ++i) {
-        //     cout << "  TextInfo " << i << ":" << endl;
-        //     cout << "    Mean: " << mTextMean[i].mean << endl;
-        //     cout << "    Score: " << mTextMean[i].score << endl;
-        // }
+            // ProminentSignMapList에 대한 뮤텍스 잠금
+            std::lock_guard<std::mutex> lock(mProminentSignMutex);
 
+            // 현재 프레임의 타임스탬프 (mTframe)이 정의되어 있다고 가정
+            double currentFrameTime = mTframe;
+
+            // mTextMean의 각 단어에 대해 처리
+            for(const auto& textInfo : mTextMean)
+            {
+                const std::string& detectedWord = textInfo.mean;
+                int minDistance = INT32_MAX;
+                size_t bestMatchIndex = mProminentSignMapList.size(); // 매칭 인덱스 초기화
+
+                // mProminentSignMapList에서 가장 유사한 canonical_word 찾기
+                for(size_t i = 0; i < mProminentSignMapList.size(); ++i)
+                {
+                    int distance = static_cast<int>(LevenshteinDist(detectedWord, mProminentSignMapList[i].canonical_word));
+                    if(distance < minDistance)
+                    {
+                        minDistance = distance;
+                        bestMatchIndex = i;
+                    }
+
+                    // 정확한 매칭이 있으면 조기 종료
+                    if(distance == 0)
+                        break;
+                }
+
+                // 유사한 단어가 임계값 이내인지 확인
+                if(minDistance <= LEVENSHTEIN_THRESHOLD && bestMatchIndex < mProminentSignMapList.size())
+                {
+                    const ProminentSignMap& matchedSign = mProminentSignMapList[bestMatchIndex];
+                    cout << "Detected Word: " << detectedWord << " matched with Canonical Word: "
+                        << matchedSign.canonical_word << " (Distance: " << minDistance << ")" << endl;
+
+                    // detections를 역순으로 순회하여 최근 프레임부터 탐색
+                    for(auto it = matchedSign.detections.rbegin(); it != matchedSign.detections.rend(); ++it)
+                    {
+                        // frame_name이 타임스탬프를 나타낸다고 가정하고 변환
+                        double frameTime = it->frame_name;
+
+                        // 현재 프레임 시간에서 TIME_WINDOW 이전인지 확인
+                        if(currentFrameTime - frameTime > TIME_WINDOW)
+                            break; // 시간 창을 벗어났으므로 탐색 종료
+
+                        // 유사한 프레임을 찾았을 때의 처리 (예: 로그 출력)
+                        cout << "  Matched Frame: " << it->frame_name
+                            << ", Score: " << textInfo.score << endl;
+                        for (size_t i = 0; i < it->text_dete.size(); ++i) {
+                            cout << "    TextDete " << i << ":" << endl;
+                            for (size_t j = 0; j < it->text_dete[i].size(); ++j) {
+                                cout << "      Point " << j << ": (" << it->text_dete[i][j].transpose() << ")" << endl;
+                            }
+                        }
+                        // 추가적인 처리가 필요하면 여기에 구현
+                    }
+                }
+                else
+                {
+                    // 유사한 단어를 찾지 못한 경우
+                    cout << "No similar canonical word found for detected word: " << detectedWord << endl;
+                }
+            }
+        }
 
         return false;
     }
