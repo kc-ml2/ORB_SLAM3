@@ -25,10 +25,16 @@
 
 #include<System.h>
 #include <Tool.h>
+#include "Settings.h"
+#include "Text.h"
 
 using namespace tool;
 
 std::vector<std::string> vstrImageFilenames;
+std::vector<TextFrame> textFrameArray;
+std::mutex mTextFrameMutex;
+std::mutex mTextMutex; // 뮤텍스 추가
+
 
 void LoadImages(const string &strFile, std::vector<string> &vstrImageFilenames,
                 std::vector<double> &vTimestamps);
@@ -78,23 +84,40 @@ int main(int argc, char **argv)
 
         tool::LoadTexts(imagePath, vTextDete, vTextMean);
         assert(vTextDete.size()==vTextMean.size());
-        
-        // Detec 출력
-        // cout << "Frame " << vstrImageFilenames[ni] << " vTextDete 내용:" << vTextDete.size() << endl;
-        // for (size_t i = 0; i < vTextDete.size(); ++i) {
-        //     cout << "  Detec " << i << ":" << endl;
-        //     for (size_t j = 0; j < vTextDete[i].size(); ++j) {
-        //         cout << "Point " << j << ": (" << vTextDete[i][j].transpose() << ")" << endl;
-        //     }
-        // }
-        // vTextMean 출력
-        // cout << "Frame " << ni << " vTextMean 내용:" << vTextMean.size() << endl;
-        // for (size_t i = 0; i < vTextMean.size(); ++i) {
-        //     cout << "  TextInfo " << i << ":" << endl;
-        //     cout << "    Mean: " << vTextMean[i].mean << endl;
-        //     cout << "    Score: " << vTextMean[i].score << endl;
-        // }
 
+        // 임시 변수에 복사하여 접근
+        std::vector<std::vector<Vec2>> localTextDete;
+        std::vector<TextInfo> localTextMean;
+        double localTframe;
+        {
+            std::lock_guard<std::mutex> lock(mTextMutex);
+            localTextDete = vTextDete;
+            localTextMean = vTextMean;
+            localTframe = vTimestamps[ni];
+        }
+        std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
+
+        // TextFrame 배열에 추가
+        TextFrame tf;
+        tf.frame_name = std::to_string(localTframe);
+        tf.text_dete = localTextDete;
+        tf.text_mean = localTextMean;
+
+        // 멤버 변수에 접근할 때는 뮤텍스 잠금 필요 (멀티스레드 환경일 경우)
+        {
+            std::lock_guard<std::mutex> lock(mTextFrameMutex);
+            textFrameArray.push_back(tf); // push_back 사용
+        }
+
+        // textFrameArray 내부의 모든 값을 출력
+        // {
+        //     std::lock_guard<std::mutex> lock(mTextFrameMutex);
+        //     std::cout << "=== TextFrameArray 내용 ===" << std::endl;
+        //     std::cout << "size: " << textFrameArray.size() << std::endl;
+            
+        //     std::cout << "============================" << std::endl;
+        // }
+        
         // Read image from file
         im = cv::imread(string(argv[3])+"/"+vstrImageFilenames[ni],cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
         double tframe = vTimestamps[ni];
@@ -137,7 +160,7 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonocular_2(im,tframe,vTextDete,vTextMean);
+        SLAM.TrackMonocular_2(im,tframe,ni,textFrameArray);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -163,6 +186,38 @@ int main(int argc, char **argv)
 
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
+    }
+
+    {
+        // std::lock_guard<std::mutex> lock(mTextFrameMutex);
+        // std::cout << "=== TextFrameArray 내용 ===" << std::endl;
+        // std::cout << "size: " << textFrameArray.size() << std::endl;
+        // for (size_t i = 0; i < textFrameArray.size(); ++i) {
+        //     const TextFrame& currentFrame = textFrameArray[i];
+        //     std::cout << "TextFrame " << i << ":" << std::endl;
+        //     std::cout << "  Frame Name: " << currentFrame.frame_name << std::endl;
+            
+        //     // text_dete 출력
+        //     std::cout << "  TextDete:" << std::endl;
+        //     for (size_t j = 0; j < currentFrame.text_dete.size(); ++j) {
+        //         std::cout << "    Detection " << j << ":" << std::endl;
+        //         for (size_t k = 0; k < currentFrame.text_dete[j].size(); ++k) {
+        //             std::cout << "      Point " << k << ": (" 
+        //                       << currentFrame.text_dete[j][k].transpose() << ")" << std::endl;
+        //         }
+        //     }
+            
+        //     // text_mean 출력
+        //     std::cout << "  TextMean:" << std::endl;
+        //     for (size_t j = 0; j < currentFrame.text_mean.size(); ++j) {
+        //         std::cout << "    TextInfo " << j << ":" << std::endl;
+        //         std::cout << "      Mean: " << currentFrame.text_mean[j].mean << std::endl;
+        //         std::cout << "      Score: " << currentFrame.text_mean[j].score << std::endl;
+        //     }
+        // }
+
+
+        // std::cout << "============================" << std::endl;
     }
 
     // Stop all threads

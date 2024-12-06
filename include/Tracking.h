@@ -81,8 +81,9 @@ public:
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
     Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
     Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, const vector<vector<Vec2>> &TextDete, const vector<TextInfo> &TextMean);
-    double mTframe;
+    Sophus::SE3f GrabImageMonocular_2(const cv::Mat &im, const double &timestamp, string filename, int ni, const vector<TextFrame> textFrameArray);
+    string mTframe;
+    int mNi;
     std::vector<std::vector<Vec2>> mTextDete;
     std::vector<TextInfo> mTextMean;
     std::mutex mTextMutex; // 뮤텍스 추가
