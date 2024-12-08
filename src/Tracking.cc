@@ -3854,7 +3854,6 @@ bool Tracking::Relocalization()
                     }
                 }
 
-
                 // If the pose is supported by enough inliers stop ransacs and continue
                 if(nGood>=50)
                 {
@@ -3868,6 +3867,16 @@ bool Tracking::Relocalization()
     if(!bMatch) 
     {
         cout << "Relocalize Fail..." << endl;
+
+        // 현재 프레임의 타임스탬프 (mTframe)이 정의되어 있다고 가정
+        double currentFrameTime = mTframe;
+
+        // trackingFailedFrameTime이 아직 설정되지 않은 경우에만 설정
+        if(trackingFailedFrameTime == 0)
+        {
+            trackingFailedFrameTime = currentFrameTime;
+        }
+
         if(!mTextMean.empty())
         {
             // 상수 정의
@@ -3877,8 +3886,7 @@ bool Tracking::Relocalization()
             // ProminentSignMapList에 대한 뮤텍스 잠금
             std::lock_guard<std::mutex> lock(mProminentSignMutex);
 
-            // 현재 프레임의 타임스탬프 (mTframe)이 정의되어 있다고 가정
-            double currentFrameTime = mTframe;
+
 
             // mTextMean의 각 단어에 대해 처리
             for(const auto& textInfo : mTextMean)
@@ -3906,35 +3914,57 @@ bool Tracking::Relocalization()
                 if(minDistance <= LEVENSHTEIN_THRESHOLD && bestMatchIndex < mProminentSignMapList.size())
                 {
                     const ProminentSignMap& matchedSign = mProminentSignMapList[bestMatchIndex];
-                    cout << "Detected Word: " << detectedWord << " matched with Canonical Word: "
-                        << matchedSign.canonical_word << " (Distance: " << minDistance << ")" << endl;
+                    cout << "detected word: " << detectedWord
+                        << " matched with: " << matchedSign.canonical_word << " (distance: " << minDistance << ")" << endl;
 
                     // detections를 역순으로 순회하여 최근 프레임부터 탐색
+                    bool foundMatch = false; // 매칭 여부 플래그
+                    TextInfo localCurrentDetection; // 현재 검출된 단어 저장 변수
+                    TextFrame localMatchedDetection; // 매칭된 프레임 저장 변수
+
                     for(auto it = matchedSign.detections.rbegin(); it != matchedSign.detections.rend(); ++it)
                     {
                         // frame_name이 타임스탬프를 나타낸다고 가정하고 변환
-                        double frameTime = it->frame_name;
+                        double frameTime;
+                        try {
+                            frameTime = it->frame_name;
+                        }
+                        catch(const std::invalid_argument& e){
+                            cerr << "잘못된 frame_name 형식: " << it->frame_name << endl;
+                            continue; // 변환 실패 시 다음 프레임으로 이동
+                        }
 
-                        // 현재 프레임 시간에서 TIME_WINDOW 이전인지 확인
-                        if(currentFrameTime - frameTime > TIME_WINDOW)
+                        // trackingFailedFrameTime보다 이전 프레임만 고려
+                        if(frameTime >= trackingFailedFrameTime)
+                            continue;
+
+                        if(trackingFailedFrameTime - frameTime > TIME_WINDOW)
                             break; // 시간 창을 벗어났으므로 탐색 종료
 
-                        // 유사한 프레임을 찾았을 때의 처리 (예: 로그 출력)
-                        cout << "  Matched Frame: " << it->frame_name
-                            << ", Score: " << textInfo.score << endl;
-                        for (size_t i = 0; i < it->text_dete.size(); ++i) {
-                            cout << "    TextDete " << i << ":" << endl;
-                            for (size_t j = 0; j < it->text_dete[i].size(); ++j) {
-                                cout << "      Point " << j << ": (" << it->text_dete[i][j].transpose() << ")" << endl;
-                            }
-                        }
-                        // 추가적인 처리가 필요하면 여기에 구현
+                        localCurrentDetection = textInfo;
+                        localMatchedDetection = *it;
+                        foundMatch = true; // 매칭됨을 표시
+
+                        break;
+                    }
+
+                    if(foundMatch){
+                        cout << "  [trackingFailFrame]" << trackingFailedFrameTime << endl;
+                        cout << "  [currentFrame]" << endl;
+                        cout << "    mean: " << localCurrentDetection.mean << endl;
+                        cout << "    score: " << localCurrentDetection.score << endl;
+                        cout << "  [matchedFrame]" << endl;
+                        cout << "    frame_name: " << localMatchedDetection.frame_name << endl;
+                    }
+                    else
+                    {
+                        // 매칭되지 않아 tracking 실패한 경우 현재 프레임 시간을 저장
+                        cout << "can't find matched word within time window: " << detectedWord << endl;
                     }
                 }
                 else
                 {
-                    // 유사한 단어를 찾지 못한 경우
-                    cout << "No similar canonical word found for detected word: " << detectedWord << endl;
+                    cout << "can't find matched word: " << detectedWord << endl;
                 }
             }
         }
@@ -3943,12 +3973,12 @@ bool Tracking::Relocalization()
     }
     else
     {
+        // Relocalization이 성공하면 trackingFailedFrameTime을 초기화
+        trackingFailedFrameTime = 0;
         mnLastRelocFrameId = mCurrentFrame.mnId;
         cout << "Relocalized!!" << endl;
         return true;
     }
-
-
 }
 
 void Tracking::Reset(bool bLocMap)

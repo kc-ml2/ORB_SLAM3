@@ -1,7 +1,6 @@
 # ./mono_tum ./../../Vocabulary/ORBvoc.txt ./RealSense_D455.yaml /mnt/sda/coex_data/loop_1
 
-./mono_tum ./../../Vocabulary/ORBvoc.txt ./RealSense_D455.yaml /mnt/sda/coex_data/track_fail/shake/shake_2
-
+./mono_tum ./../../Vocabulary/ORBvoc.txt ./RealSense_D455.yaml /mnt/sda/coex_data/track_fail/columbia/columbia_1
 # ./mono_tum ./../../Vocabulary/ORBvoc.txt ./RealSense_D455.yaml /mnt/sda/coex_data/track_fail/lifefourcut/lifefourcut_1
 # mv /home/sooyong/workspace/ORB_SLAM3/Examples/Monocular/KeyFrameTrajectory.txt /mnt/sda/coex_data/track_fail/lifefourcut/lifefourcut_1/results/KeyFrameTrajectory1.txt
 
