@@ -75,7 +75,7 @@ public:
     std::vector<std::vector<Vec2>> mTextDete;
     std::vector<TextInfo> mTextMean;
     std::mutex mTextMutex;
-
+    double trackingFailedFrameTime=0;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
