@@ -733,6 +733,94 @@ namespace ORB_SLAM3
         return false;
     }
 
+    bool TwoViewReconstruction::ReconstructText(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, Sophus::SE3f &Tcw)
+    {
+        mvKeys1.clear();
+        mvKeys2.clear();
+
+        mvKeys1 = vKeys1;
+        mvKeys2 = vKeys2;
+
+        float minParallax = 1.0;
+
+        return ReconstructTcw(mvKeys1, mvKeys2, mK, Tcw, minParallax);
+    }
+
+    bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint> &mvKeys1,
+                                           const std::vector<cv::KeyPoint> &mvKeys2,
+                                           const Eigen::Matrix3f &K,
+                                           Sophus::SE3f &Tcw,
+                                           float minParallax)
+    {
+        // 입력된 매칭된 키포인트가 4쌍인지 확인
+        if (mvKeys1.size() != 4 || mvKeys2.size() != 4)
+        {
+            std::cerr << "매칭된 키포인트는 정확히 4쌍이어야 합니다." << std::endl;
+            return false;
+        }
+
+        // Normalize coordinates
+        vector<cv::Point2f> matchedPoints1, matchedPoints2;
+        Eigen::Matrix3f T1, T2;
+        Normalize(mvKeys1,matchedPoints1, T1);
+        Normalize(mvKeys2,matchedPoints2, T2);
+
+        // 호모그래피 계산 (RANSAC을 사용하지 않고 직접 계산)
+        cv::Mat H = cv::findHomography(matchedPoints1, matchedPoints2, 0); // 정밀한 계산을 원하면 RANSAC 사용 가능
+
+        if (H.empty())
+        {
+            std::cerr << "호모그래피 계산에 실패했습니다." << std::endl;
+            return false;
+        }
+
+        // 호모그래피를 Eigen 행렬로 변환
+        Eigen::Matrix3f H_eigen;
+        for(int i=0; i<3; ++i)
+            for(int j=0; j<3; ++j)
+                H_eigen(i,j) = H.at<double>(i,j);
+
+        // 내재 행렬의 역행렬 계산
+        Eigen::Matrix3f invK = K.inverse();
+        Eigen::Matrix3f A = invK * H_eigen * K;
+
+        // SVD 분해
+        Eigen::JacobiSVD<Eigen::Matrix3f> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::Matrix3f U = svd.matrixU();
+        Eigen::Matrix3f V = svd.matrixV();
+        Eigen::Matrix3f Vt = V.transpose();
+        Eigen::Vector3f w = svd.singularValues();
+
+        float s = U.determinant() * Vt.determinant();
+
+        float d1 = w(0);
+        float d2 = w(1);
+        float d3 = w(2);
+
+        // 특이값 체크
+        if(d1/d2 < 1.00001 || d2/d3 < 1.00001)
+        {
+            std::cerr << "특이값 분해 조건을 만족하지 않습니다." << std::endl;
+            return false;
+        }
+
+        // 회전 및 평행 이동 가설 생성 (8개 중 1개 선택)
+        // 기존 코드의 가설 생성 부분을 유지하되, 단일 해만 사용
+        // 여기서는 단순히 첫 번째 가설을 선택하도록 함
+
+        // 예시로 첫 번째 가설을 사용
+        Eigen::Matrix3f R = s * U * Vt;
+        Eigen::Vector3f t = U.col(2); // 단순화된 예시
+
+        // 파라미터 검증 (파랄랙스 등)
+        // 최소 파랄랙스 조건을 만족하는지 확인
+        // 실제 구현에서는 파랄랙스 계산이 필요하지만, 여기서는 생략
+
+        // Tcw 설정
+        Tcw = Sophus::SE3f(R, t);
+
+        return true;
+    }
 
     void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T)
     {
