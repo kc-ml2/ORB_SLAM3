@@ -31,6 +31,7 @@
 #include "Tool.h"
 #include "Text.h"
 #include "Settings.h"
+#include "TwoViewReconstruction.h"
 
 #include <iostream>
 
@@ -3955,6 +3956,54 @@ bool Tracking::Relocalization()
                         cout << "    score: " << localCurrentDetection.score << endl;
                         cout << "  [matchedFrame]" << endl;
                         cout << "    frame_name: " << localMatchedDetection.frame_name << endl;
+
+                        std::vector<cv::KeyPoint> vKeys1;
+                        std::vector<cv::KeyPoint> vKeys2;
+
+                        // Reserve space for 4 keypoints each
+                        vKeys1.reserve(4);
+                        vKeys2.reserve(4);
+
+                        // 현재 검출된 단어의 keypoints 추출 (vKeys1)
+                        if(!mTextDete.empty()){
+                            // 첫 번째 text_dete를 사용한다고 가정
+                            const std::vector<Vec2>& currentDetections = mTextDete[0];
+                            for(const auto& vec : currentDetections){
+                                double x = vec(0);
+                                double y = vec(1);
+                                cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
+                                vKeys1.push_back(kp);
+                            }
+                        } else {
+                            std::cerr << "현재 검출된 단어에 text_dete가 비어있습니다." << std::endl;
+                        }
+
+                        // 매칭된 프레임의 keypoints 추출 (vKeys2)
+                        if(!localMatchedDetection.text_dete.empty()){
+                            // 첫 번째 text_dete를 사용한다고 가정
+                            const std::vector<Vec2>& matchedDetections = localMatchedDetection.text_dete[0];
+                            for(const auto& vec : matchedDetections){
+                                double x = vec(0);
+                                double y = vec(1);
+                                cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
+                                vKeys2.push_back(kp);
+                            }
+                        } else {
+                            std::cerr << "매칭된 프레임에 text_dete가 비어있습니다." << std::endl;
+                        }
+
+                        // Sophus::SE3f Tcw(textTcw); // eigTcw는 4*4변환 행렬 PnP solver에 의해 추정된 카메라 포즈를 담고 있음, SE3 클래스로 회전 R과 t를 포함
+                        // mCurrentFrame.SetPose(Tcw);
+                        // For debugging, print the keypoints
+                        std::cout << "vKeys1:" << std::endl;
+                        for(const auto& kp : vKeys1){
+                            std::cout << "  (" << kp.pt.x << ", " << kp.pt.y << ")" << std::endl;
+                        }
+
+                        std::cout << "vKeys2:" << std::endl;
+                        for(const auto& kp : vKeys2){
+                            std::cout << "  (" << kp.pt.x << ", " << kp.pt.y << ")" << std::endl;
+                        }
                     }
                     else
                     {

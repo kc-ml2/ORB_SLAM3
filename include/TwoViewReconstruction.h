@@ -41,6 +41,7 @@ namespace ORB_SLAM3
         // Selects a model and tries to recover the motion and the structure from motion
         bool Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const std::vector<int> &vMatches12,
                           Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated);
+        bool ReconstructText(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, Sophus::SE3f &Tcw);
 
     private:
 
@@ -59,6 +60,7 @@ namespace ORB_SLAM3
 
         bool ReconstructH(std::vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
                           Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D,std:: vector<bool> &vbTriangulated, float minParallax, int minTriangulated);
+        bool ReconstructTcw(const std::vector<cv::KeyPoint> &mvKeys1,const std::vector<cv::KeyPoint> &mvKeys2, const Eigen::Matrix3f &K, Sophus::SE3f &Tcw, float minParallax);
 
         void Normalize(const std::vector<cv::KeyPoint> &vKeys, std::vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T);
 
