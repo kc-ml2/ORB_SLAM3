@@ -752,7 +752,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
 
         vector<float> vCamCalib{fx,fy,cx,cy};
 
-        mpCamera = new Pinhole(vCamCalib);
+        mpCamera = new Pinhole(vCamCalib); // YAML에서 카메라 파라미터를 읽어와 mpCamera에 초기화
 
         mpCamera = mpAtlas->AddCamera(mpCamera);
 
@@ -4003,6 +4003,22 @@ bool Tracking::Relocalization()
                         std::cout << "vKeys2:" << std::endl;
                         for(const auto& kp : vKeys2){
                             std::cout << "  (" << kp.pt.x << ", " << kp.pt.y << ")" << std::endl;
+                        }
+
+                        Sophus::SE3f Tcw;
+
+                        if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, Tcw))
+                        {
+                            std::cout << "Tcw (as matrix): \n" << Tcw.matrix() << std::endl;
+                            mCurrentFrame.SetPose(Tcw);
+                            bMatch = true;
+
+                            // Success handling: reset trackingFailedFrameTime and update last relocation frame ID
+                            trackingFailedFrameTime = 0;
+                            mnLastRelocFrameId = mCurrentFrame.mnId;
+                            cout << "Relocalized!! via Text Matching" << endl;
+
+                            return true; // 텍스트 기반 relocalization 성공 시 즉시 true 반환
                         }
                     }
                     else
