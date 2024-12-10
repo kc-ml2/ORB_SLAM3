@@ -90,6 +90,15 @@ namespace ORB_SLAM3 {
         return tvr->Reconstruct(vKeys1,vKeys2,vMatches12,T21,vP3D,vbTriangulated);
     }
 
+    bool Pinhole::ReconstructWithTextTwoViews(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, Sophus::SE3f &T21){
+        if(!tvr){
+            Eigen::Matrix3f K = this->toK_();
+            tvr = new TwoViewReconstruction(K);
+        }
+
+        return tvr->ReconstructText(vKeys1,vKeys2,T21);
+    }
+
 
     cv::Mat Pinhole::toK() {
         cv::Mat K = (cv::Mat_<float>(3, 3)
