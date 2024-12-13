@@ -52,7 +52,7 @@ namespace ORB_SLAM3
         mvMatches12.clear();
         mvMatches12.reserve(mvKeys2.size());
         mvbMatched1.resize(mvKeys1.size());
-        for(size_t i=0, iend=vMatches12.size();i<iend; i++)
+        for(size_t i=0, iend=vMatches12.size();i<iend; i++) // vMatches12 는 i번째 point가 두번째 프레임에서 몇번째 point와 일치하는지 알려줌
         {
             if(vMatches12[i]>=0)
             {
@@ -740,6 +740,17 @@ namespace ORB_SLAM3
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
 
+        // mvMatches12와 mvbMatched1을 4개의 키포인트에 맞게 초기화
+        mvMatches12.clear();
+        mvMatches12.reserve(4);
+        mvbMatched1.resize(4, true); // 모든 키포인트가 매칭되었다고 가정
+
+        // 4개의 키포인트가 순서대로 매칭된다고 가정
+        for(int i = 0; i < 4; ++i)
+        {
+            mvMatches12.emplace_back(std::make_pair(i, i)); // (Frame1 인덱스, Frame2 인덱스)
+        }
+
         float minParallax = 1.0;
         Eigen::Matrix3f H21;
         FindTextHomography(mvKeys1, mvKeys2, H21);
@@ -933,27 +944,24 @@ namespace ORB_SLAM3
         vector<bool> vbMatchesInliers = vector<bool>(4,false);
 
         // Iteration variables
-        vector<cv::Point2f> vPn1i(8);
-        vector<cv::Point2f> vPn2i(8);
+        vector<cv::Point2f> vPn1i(4);
+        vector<cv::Point2f> vPn2i(4);
         Eigen::Matrix3f H21i, H12i;
         vector<bool> vbCurrentInliers(4,false);
 
-        // Perform all RANSAC iterations and save the solution with highest score
-        for(int it=0; it<mMaxIterations; it++)
+        for(size_t j=0; j<4; j++)
         {
-            // Select a minimum set
-            for(size_t j=0; j<4; j++)
-            {
-                vPn1i[j] = matchedPoints1[j];
-                vPn2i[j] = matchedPoints2[j];
-            }
-
-            Eigen::Matrix3f Hn = ComputeH21(vPn1i,vPn2i);
-            H21i = T2inv * Hn * T1;
-            H12i = H21i.inverse();
-
-            H21 = H21i;
+            vPn1i[j] = matchedPoints1[j];
+            vPn2i[j] = matchedPoints2[j];
         }
+
+        Eigen::Matrix3f Hn = ComputeH21(vPn1i,vPn2i);
+        H21i = T2inv * Hn * T1;
+        H12i = H21i.inverse();
+
+        H21 = H21i;
+
+        return true;
     }
 
 
