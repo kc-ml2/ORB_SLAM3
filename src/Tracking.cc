@@ -2070,10 +2070,14 @@ void Tracking::Track()
                     else
                     {
                         // Relocalization
-                        // cout << "Relocalization1" << endl;
+                        cout << "Relocalization1" << endl;
                         bOK = Relocalization();
+                        if(bOK) {
+                            mState = OK;
+                        }
                         //std::cout << "mCurrentFrame.mTimeStamp:" << to_string(mCurrentFrame.mTimeStamp) << std::endl;
                         //std::cout << "mTimeStampLost:" << to_string(mTimeStampLost) << std::endl;
+                        cout << "bOK: " << bOK << ", mState: " << mState << endl;
                         if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
                         {
                             cout << "Track Lost..." << endl;
@@ -2205,6 +2209,7 @@ void Tracking::Track()
             {
                 // cout << "TrackLocalMap!" << endl;
                 bOK = TrackLocalMap();
+                cout << "bOK-TrackLocalMap(): " << bOK << endl;
 
             }
             if(!bOK) // tracking fail
@@ -4005,12 +4010,12 @@ bool Tracking::Relocalization()
                             std::cout << "  (" << kp.pt.x << ", " << kp.pt.y << ")" << std::endl;
                         }
 
-                        Sophus::SE3f Tcw;
+                        Sophus::SE3f tTcw;
 
-                        if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, Tcw))
+                        if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
                         {
-                            std::cout << "Tcw (as matrix): \n" << Tcw.matrix() << std::endl;
-                            mCurrentFrame.SetPose(Tcw);
+                            std::cout << "tTcw (as matrix): \n" << tTcw.matrix() << std::endl;
+                            mCurrentFrame.SetPose(tTcw);
                             bMatch = true;
 
                             // Success handling: reset trackingFailedFrameTime and update last relocation frame ID

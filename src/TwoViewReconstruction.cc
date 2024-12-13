@@ -178,7 +178,6 @@ namespace ORB_SLAM3
         }
     }
 
-
     void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, float &score, Eigen::Matrix3f &F21)
     {
         // Number of putative matches
@@ -589,7 +588,7 @@ namespace ORB_SLAM3
         Eigen::Vector3f w = svd.singularValues();
 
         float s = U.determinant() * Vt.determinant();
-
+        
         float d1 = w(0);
         float d2 = w(1);
         float d3 = w(2);
@@ -742,15 +741,176 @@ namespace ORB_SLAM3
         mvKeys2 = vKeys2;
 
         float minParallax = 1.0;
+        Eigen::Matrix3f H21;
+        FindTextHomography(mvKeys1, mvKeys2, H21);
+        ReconstructTcw(mvKeys1, mvKeys2, H21, mK, Tcw, minParallax);
 
-        return ReconstructTcw(mvKeys1, mvKeys2, mK, Tcw, minParallax);
+        return true;
     }
 
-    bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint> &mvKeys1,
-                                           const std::vector<cv::KeyPoint> &mvKeys2,
-                                           const Eigen::Matrix3f &K,
-                                           Sophus::SE3f &Tcw,
-                                           float minParallax)
+    bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint>& mvKeys1, const std::vector<cv::KeyPoint>& mvKeys2, const Eigen::Matrix3f &H21, const Eigen::Matrix3f &K, Sophus::SE3f &Tcw, float minParallax)
+    {
+        // 인라이어 매치 표시 (모든 매치가 인라이어라고 가정)
+        std::vector<bool> vbMatchesInliers(4, true);
+
+        // 호모그래피 분해를 위한 정규화
+        Eigen::Matrix3f invK = K.inverse();
+        Eigen::Matrix3f A = invK * H21 * K;
+
+        // SVD 분해
+        Eigen::JacobiSVD<Eigen::Matrix3f> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::Matrix3f U = svd.matrixU();
+        Eigen::Matrix3f V = svd.matrixV();
+        Eigen::Matrix3f Vt = V.transpose();
+        Eigen::Vector3f w = svd.singularValues();
+
+        // 스케일 팩터 계산
+        float s = U.determinant() * Vt.determinant();
+
+        float d1 = w(0);
+        float d2 = w(1);
+        float d3 = w(2);
+
+        // 특이값 검증
+        if(d1/d2 < 1.00001 || d2/d3 < 1.00001)
+        {
+            return false;
+        }
+
+        // 회전 및 평행 이동 가설 저장
+        std::vector<Eigen::Matrix3f> vR;
+        std::vector<Eigen::Vector3f> vt, vn;
+        vR.reserve(8);
+        vt.reserve(8);
+        vn.reserve(8);
+
+        // 호모그래피 분해를 위한 보조 변수 계산
+        float aux1 = sqrt((d1*d1 - d2*d2) / (d1*d1 - d3*d3));
+        float aux3 = sqrt((d2*d2 - d3*d3) / (d1*d1 - d3*d3));
+        float x1[] = {aux1, aux1, -aux1, -aux1};
+        float x3[] = {aux3, -aux3, aux3, -aux3};
+
+        // d' = d2인 경우
+        float aux_stheta = sqrt((d1*d1 - d2*d2) * (d2*d2 - d3*d3)) / ((d1 + d3) * d2);
+        float ctheta = (d2*d2 + d1*d3) / ((d1 + d3) * d2);
+        float stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
+
+        // 첫 번째 4개의 가설 생성
+        for(int i=0; i<4; i++)
+        {
+            Eigen::Matrix3f Rp;
+            Rp.setZero();
+            Rp(0,0) = ctheta;
+            Rp(0,2) = -stheta[i];
+            Rp(1,1) = 1.f;
+            Rp(2,0) = stheta[i];
+            Rp(2,2) = ctheta;
+
+            Eigen::Matrix3f R = s*U*Rp*Vt;
+            vR.push_back(R);
+
+            Eigen::Vector3f tp;
+            tp(0) = x1[i];
+            tp(1) = 0;
+            tp(2) = -x3[i];
+            tp *= d1-d3;
+
+            Eigen::Vector3f t = U*tp;
+            vt.push_back(t / t.norm());
+
+            Eigen::Vector3f np;
+            np(0) = x1[i];
+            np(1) = 0;
+            np(2) = x3[i];
+
+            Eigen::Vector3f n = V*np;
+            if(n(2) < 0)
+                n = -n;
+            vn.push_back(n);
+        }
+
+        // d' = -d2인 경우
+        float aux_sphi = sqrt((d1*d1 - d2*d2) * (d2*d2 - d3*d3)) / ((d1 - d3) * d2);
+        float cphi = (d1*d3 - d2*d2) / ((d1 - d3) * d2);
+        float sphi[] = {aux_sphi, -aux_sphi, -aux_sphi, aux_sphi};
+
+        for(int i=0; i<4; i++)
+        {
+            Eigen::Matrix3f Rp;
+            Rp.setZero();
+            Rp(0,0) = cphi;
+            Rp(0,2) = sphi[i];
+            Rp(1,1) = -1;
+            Rp(2,0) = sphi[i];
+            Rp(2,2) = -cphi;
+
+            Eigen::Matrix3f R = s*U*Rp*Vt;
+            vR.push_back(R);
+
+            Eigen::Vector3f tp;
+            tp(0) = x1[i];
+            tp(1) = 0;
+            tp(2) = x3[i];
+            tp *= d1+d3;
+
+            Eigen::Vector3f t = U*tp;
+            vt.push_back(t / t.norm());
+
+            Eigen::Vector3f np;
+            np(0) = x1[i];
+            np(1) = 0;
+            np(2) = x3[i];
+
+            Eigen::Vector3f n = V*np;
+            if(n(2) < 0)
+                n = -n;
+            vn.push_back(n);
+        }
+
+        // 가장 좋은 가설을 찾기 위한 변수 초기화
+        int bestGood = 0;
+        int secondBestGood = 0;
+        int bestSolutionIdx = -1;
+        float bestParallax = -1;
+        std::vector<cv::Point3f> bestP3D;
+        std::vector<bool> bestTriangulated;
+
+        // 모든 8개의 가설에 대해 평가
+        for(size_t i = 0; i < 8; i++)
+        {
+            float parallaxi;
+            vector<cv::Point3f> vP3Di;
+            vector<bool> vbTriangulatedi;
+            int nGood = CheckRT(vR[i], vt[i], mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3Di, 4.0 * mSigma2, vbTriangulatedi, parallaxi);
+
+            if(nGood > bestGood)
+            {
+                secondBestGood = bestGood;
+                bestGood = nGood;
+                bestSolutionIdx = i;
+                bestParallax = parallaxi;
+                bestP3D = vP3Di;
+                bestTriangulated = vbTriangulatedi;
+            }
+            else if(nGood > secondBestGood)
+            {
+                secondBestGood = nGood;
+            }
+        }
+
+        // 기준에 따라 최적의 가설 선택
+        if(secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > 3 && bestGood > 0.9 * 4)
+        {
+            Tcw = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
+            // vbTriangulated = bestTriangulated;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    bool TwoViewReconstruction::FindTextHomography(const std::vector<cv::KeyPoint> &mvKeys1, const std::vector<cv::KeyPoint> &mvKeys2, Eigen::Matrix3f &H21)
     {
         // 입력된 매칭된 키포인트가 4쌍인지 확인
         if (mvKeys1.size() != 4 || mvKeys2.size() != 4)
@@ -761,66 +921,41 @@ namespace ORB_SLAM3
 
         // Normalize coordinates
         vector<cv::Point2f> matchedPoints1, matchedPoints2;
+        for (const auto &kp : mvKeys1) matchedPoints1.push_back(kp.pt);
+        for (const auto &kp : mvKeys2) matchedPoints2.push_back(kp.pt);
+
         Eigen::Matrix3f T1, T2;
         Normalize(mvKeys1,matchedPoints1, T1);
         Normalize(mvKeys2,matchedPoints2, T2);
+        Eigen::Matrix3f T2inv = T2.inverse();
 
-        // 호모그래피 계산 (RANSAC을 사용하지 않고 직접 계산)
-        cv::Mat H = cv::findHomography(matchedPoints1, matchedPoints2, 0); // 정밀한 계산을 원하면 RANSAC 사용 가능
+        // Best Results variables
+        vector<bool> vbMatchesInliers = vector<bool>(4,false);
 
-        if (H.empty())
+        // Iteration variables
+        vector<cv::Point2f> vPn1i(8);
+        vector<cv::Point2f> vPn2i(8);
+        Eigen::Matrix3f H21i, H12i;
+        vector<bool> vbCurrentInliers(4,false);
+
+        // Perform all RANSAC iterations and save the solution with highest score
+        for(int it=0; it<mMaxIterations; it++)
         {
-            std::cerr << "호모그래피 계산에 실패했습니다." << std::endl;
-            return false;
+            // Select a minimum set
+            for(size_t j=0; j<4; j++)
+            {
+                vPn1i[j] = matchedPoints1[j];
+                vPn2i[j] = matchedPoints2[j];
+            }
+
+            Eigen::Matrix3f Hn = ComputeH21(vPn1i,vPn2i);
+            H21i = T2inv * Hn * T1;
+            H12i = H21i.inverse();
+
+            H21 = H21i;
         }
-
-        // 호모그래피를 Eigen 행렬로 변환
-        Eigen::Matrix3f H_eigen;
-        for(int i=0; i<3; ++i)
-            for(int j=0; j<3; ++j)
-                H_eigen(i,j) = H.at<double>(i,j);
-
-        // 내재 행렬의 역행렬 계산
-        Eigen::Matrix3f invK = K.inverse();
-        Eigen::Matrix3f A = invK * H_eigen * K;
-
-        // SVD 분해
-        Eigen::JacobiSVD<Eigen::Matrix3f> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-        Eigen::Matrix3f U = svd.matrixU();
-        Eigen::Matrix3f V = svd.matrixV();
-        Eigen::Matrix3f Vt = V.transpose();
-        Eigen::Vector3f w = svd.singularValues();
-
-        float s = U.determinant() * Vt.determinant();
-
-        float d1 = w(0);
-        float d2 = w(1);
-        float d3 = w(2);
-
-        // 특이값 체크
-        if(d1/d2 < 1.00001 || d2/d3 < 1.00001)
-        {
-            std::cerr << "특이값 분해 조건을 만족하지 않습니다." << std::endl;
-            return false;
-        }
-
-        // 회전 및 평행 이동 가설 생성 (8개 중 1개 선택)
-        // 기존 코드의 가설 생성 부분을 유지하되, 단일 해만 사용
-        // 여기서는 단순히 첫 번째 가설을 선택하도록 함
-
-        // 예시로 첫 번째 가설을 사용
-        Eigen::Matrix3f R = s * U * Vt;
-        Eigen::Vector3f t = U.col(2); // 단순화된 예시
-
-        // 파라미터 검증 (파랄랙스 등)
-        // 최소 파랄랙스 조건을 만족하는지 확인
-        // 실제 구현에서는 파랄랙스 계산이 필요하지만, 여기서는 생략
-
-        // Tcw 설정
-        Tcw = Sophus::SE3f(R, t);
-
-        return true;
     }
+
 
     void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T)
     {
