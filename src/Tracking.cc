@@ -1627,6 +1627,7 @@ Sophus::SE3f Tracking::GrabImageMonocular_2(const cv::Mat &im, const double &tim
         mTextDete = textFrameArray[ni].text_dete;
         mTextMean = textFrameArray[ni].text_mean;
         mTframe = textFrameArray[ni].frame_name;
+        mbTextRelocalized = false;
         mNi = ni;
     }
     {
@@ -2014,11 +2015,13 @@ void Tracking::Track()
                 if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
                     Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
+                    cout << "TRACK: Track with respect to the reference KF" << endl;
                     bOK = TrackReferenceKeyFrame();
                 }
                 else
                 {
                     Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
+                    cout << "TRACK: Track with motion model" << endl;
                     bOK = TrackWithMotionModel();
                     if(!bOK)
                         bOK = TrackReferenceKeyFrame();
@@ -2833,7 +2836,19 @@ bool Tracking::TrackReferenceKeyFrame()
     if(nmatches<9)
     {
         cout << "TRACK_REF_KF: Less than 15 matches!!\n";
-        return false;
+        if(mbTextRelocalized)
+        {
+            cout << "Attempting to relocalize using text matching despite low matches..." << endl;
+
+            // 텍스트 매칭을 통한 재로컬라이제이션 성공 시 트래킹 유지
+            return true;
+            
+        }
+        else
+        {
+            cout << "Fail to match..." << endl;
+            return false;
+        }
     }
 
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
@@ -3130,9 +3145,22 @@ bool Tracking::TrackLocalMap()
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
-    cout << mnMatchesInliers << endl;
-    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50) // inlier 수가 50미만일 경우 tracking fail
-        return false;
+    // cout << mnMatchesInliers << endl;
+    // if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50) // inlier 수가 50미만일 경우 tracking fail
+    //     return false;
+    if(mCurrentFrame.mnId < mnLastRelocFrameId + mMaxFrames && mnMatchesInliers < 50)
+    {
+        // 이전에 텍스트 매칭을 통해 재로컬라이제이션된 경우
+        if(mbTextRelocalized && !mTextDete.empty()) // mbTextRelocalized: 텍스트 매칭 성공 플래그, HasTextInFrame(): 현재 프레임에 텍스트 존재 여부 확인 함수
+        {
+            return true;
+        }
+        else
+        {
+            // 일반적인 트래킹 실패 처리
+            return false;
+        }
+    }
 
     if((mnMatchesInliers>10)&&(mState==RECENTLY_LOST))
         return true;
@@ -4015,9 +4043,11 @@ bool Tracking::Relocalization()
                         if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
                         {
                             std::cout << "tTcw (as matrix): \n" << tTcw.matrix() << std::endl;
-                            mCurrentFrame.SetPose(tTcw);
-                            bMatch = true;
 
+
+                            mCurrentFrame.SetPose(tTcw); 
+                            bMatch = true;
+                            mbTextRelocalized = true; // 텍스트 매칭 성공 플래그 설정
                             // Success handling: reset trackingFailedFrameTime and update last relocation frame ID
                             trackingFailedFrameTime = 0;
                             mnLastRelocFrameId = mCurrentFrame.mnId;
@@ -4025,6 +4055,7 @@ bool Tracking::Relocalization()
 
                             return true; // 텍스트 기반 relocalization 성공 시 즉시 true 반환
                         }
+                        cout << "NO Tcw" << endl;
                     }
                     else
                     {

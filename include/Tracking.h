@@ -75,6 +75,7 @@ public:
     std::vector<std::vector<Vec2>> mTextDete;
     std::vector<TextInfo> mTextMean;
     std::mutex mTextMutex;
+    bool mbTextRelocalized;
     double trackingFailedFrameTime=0;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -754,9 +754,8 @@ namespace ORB_SLAM3
         float minParallax = 1.0;
         Eigen::Matrix3f H21;
         FindTextHomography(mvKeys1, mvKeys2, H21);
-        ReconstructTcw(mvKeys1, mvKeys2, H21, mK, Tcw, minParallax);
 
-        return true;
+        return ReconstructTcw(mvKeys1, mvKeys2, H21, mK, Tcw, minParallax);
     }
 
     bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint>& mvKeys1, const std::vector<cv::KeyPoint>& mvKeys2, const Eigen::Matrix3f &H21, const Eigen::Matrix3f &K, Sophus::SE3f &Tcw, float minParallax)
@@ -908,17 +907,19 @@ namespace ORB_SLAM3
                 secondBestGood = nGood;
             }
         }
+        
+        // cout << "secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > 3 && bestGood > 0.9 * 4: " << (secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > 3 && bestGood > 0.9 * 4) << endl;
 
         // 기준에 따라 최적의 가설 선택
-        if(secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > 3 && bestGood > 0.9 * 4)
-        {
-            Tcw = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
-            // vbTriangulated = bestTriangulated;
+        // if(secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > 3 && bestGood > 0.9 * 4)
+        // {
+        Tcw = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
+        // vbTriangulated = bestTriangulated;
 
-            return true;
-        }
+        return true;
+        // }
 
-        return false;
+        // return false;
     }
 
     bool TwoViewReconstruction::FindTextHomography(const std::vector<cv::KeyPoint> &mvKeys1, const std::vector<cv::KeyPoint> &mvKeys2, Eigen::Matrix3f &H21)
