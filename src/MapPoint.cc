@@ -138,7 +138,7 @@ KeyFrame* MapPoint::GetReferenceKeyFrame()
     return mpRefKF;
 }
 
-void MapPoint::AddObservation(KeyFrame* pKF, int idx)
+void MapPoint::AddObservation(KeyFrame* pKF, int idx) // TODO
 {
     unique_lock<mutex> lock(mMutexFeatures);
     tuple<int,int> indexes;

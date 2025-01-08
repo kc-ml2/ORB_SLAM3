@@ -221,7 +221,7 @@ void KeyFrame::UpdateBestCovisibles()
         }
     }
 
-    mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
+    mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end()); // FIXME
     mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 }
 
@@ -240,7 +240,7 @@ vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames()
     return mvpOrderedConnectedKeyFrames;
 }
 
-vector<KeyFrame*> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
+vector<KeyFrame*> KeyFrame::GetBestCovisibilityKeyFrames(const int &N) // FIXME
 {
     unique_lock<mutex> lock(mMutexConnections);
     if((int)mvpOrderedConnectedKeyFrames.size()<N)
@@ -412,8 +412,10 @@ void KeyFrame::UpdateConnections(bool upParent)
 
     // This should not happen
     if(KFcounter.empty())
+    {
+        cout << "KF counter is empty" << endl;
         return;
-
+    }
     //If the counter is greater than threshold add connection
     //In case no keyframe counter is over threshold add the one with maximum counter
     int nmax=0;
@@ -426,7 +428,7 @@ void KeyFrame::UpdateConnections(bool upParent)
         cout << "UPDATE_CONN: current KF " << mnId << endl;
     for(map<KeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend; mit++)
     {
-        if(!upParent)
+        if(!upParent) 
             cout << "  UPDATE_CONN: KF " << mit->first->mnId << " ; num matches: " << mit->second << endl;
         if(mit->second>nmax)
         {
@@ -458,7 +460,7 @@ void KeyFrame::UpdateConnections(bool upParent)
     {
         unique_lock<mutex> lockCon(mMutexConnections);
 
-        mConnectedKeyFrameWeights = KFcounter;
+        mConnectedKeyFrameWeights = KFcounter; // FIXME
         mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 

@@ -753,7 +753,7 @@ namespace ORB_SLAM3
 
         float minParallax = 1.0;
         Eigen::Matrix3f H21;
-        FindTextHomography(mvKeys1, mvKeys2, H21);
+        FindTextHomography(H21);
 
         return ReconstructTcw(mvKeys1, mvKeys2, H21, mK, Tcw, minParallax);
     }
@@ -922,41 +922,20 @@ namespace ORB_SLAM3
         // return false;
     }
 
-    bool TwoViewReconstruction::FindTextHomography(const std::vector<cv::KeyPoint> &mvKeys1, const std::vector<cv::KeyPoint> &mvKeys2, Eigen::Matrix3f &H21)
+    bool TwoViewReconstruction::FindTextHomography(Eigen::Matrix3f &H21)
     {
-        // 입력된 매칭된 키포인트가 4쌍인지 확인
-        if (mvKeys1.size() != 4 || mvKeys2.size() != 4)
-        {
-            std::cerr << "매칭된 키포인트는 정확히 4쌍이어야 합니다." << std::endl;
-            return false;
-        }
 
         // Normalize coordinates
-        vector<cv::Point2f> matchedPoints1, matchedPoints2;
-        for (const auto &kp : mvKeys1) matchedPoints1.push_back(kp.pt);
-        for (const auto &kp : mvKeys2) matchedPoints2.push_back(kp.pt);
+        vector<cv::Point2f> vPn1, vPn2;
 
         Eigen::Matrix3f T1, T2;
-        Normalize(mvKeys1,matchedPoints1, T1);
-        Normalize(mvKeys2,matchedPoints2, T2);
+        Normalize(mvKeys1,vPn1, T1);
+        Normalize(mvKeys2,vPn2, T2);
         Eigen::Matrix3f T2inv = T2.inverse();
 
-        // Best Results variables
-        vector<bool> vbMatchesInliers = vector<bool>(4,false);
-
-        // Iteration variables
-        vector<cv::Point2f> vPn1i(4);
-        vector<cv::Point2f> vPn2i(4);
         Eigen::Matrix3f H21i, H12i;
-        vector<bool> vbCurrentInliers(4,false);
 
-        for(size_t j=0; j<4; j++)
-        {
-            vPn1i[j] = matchedPoints1[j];
-            vPn2i[j] = matchedPoints2[j];
-        }
-
-        Eigen::Matrix3f Hn = ComputeH21(vPn1i,vPn2i);
+        Eigen::Matrix3f Hn = ComputeH21(vPn1,vPn2);
         H21i = T2inv * Hn * T1;
         H12i = H21i.inverse();
 

@@ -220,7 +220,8 @@ namespace ORB_SLAM3
             return 4.0;
     }
 
-    int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches)
+    // Monocular
+    int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches) // TODO
     {
         const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 

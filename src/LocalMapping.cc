@@ -98,14 +98,14 @@ void LocalMapping::Run()
 #endif
 
             // Triangulate new MapPoints
-            CreateNewMapPoints();
+            CreateNewMapPoints(); // TODO
 
             mbAbortBA = false;
 
             if(!CheckNewKeyFrames())
             {
                 // Find more matches in neighbor keyframes and fuse point duplications
-                SearchInNeighbors();
+                SearchInNeighbors(); // TODO
             }
 
 #ifdef REGISTER_TIMES
@@ -307,17 +307,23 @@ void LocalMapping::ProcessNewKeyFrame()
     mpCurrentKeyFrame->ComputeBoW();
 
     // Associate MapPoints to the new keyframe and update normal and descriptor
-    const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-
+    const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches(); // FIXME
+    cout << "vpMapPointMatchesSSSSSIze: " << vpMapPointMatches.size() << endl;
+    // cout << "vpMapPointMatchesSSSSSIze: " << vpMapPointMatches[1] << endl;
+    int countt = 0;
     for(size_t i=0; i<vpMapPointMatches.size(); i++)
     {
         MapPoint* pMP = vpMapPointMatches[i];
         if(pMP)
         {
+            countt++;
+            // cout << "pMP 통과" << endl;
             if(!pMP->isBad())
             {
+                // cout << "isBad 통과" << endl;
                 if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))
                 {
+                    // cout << "IsInKeyFrame 통과" << endl;
                     pMP->AddObservation(mpCurrentKeyFrame, i);
                     pMP->UpdateNormalAndDepth();
                     pMP->ComputeDistinctiveDescriptors();
@@ -329,6 +335,7 @@ void LocalMapping::ProcessNewKeyFrame()
             }
         }
     }
+    cout << "numpMP: " << countt << endl;
 
     // Update links in the Covisibility Graph
     mpCurrentKeyFrame->UpdateConnections();
@@ -385,14 +392,16 @@ void LocalMapping::MapPointCulling()
 }
 
 
-void LocalMapping::CreateNewMapPoints()
+void LocalMapping::CreateNewMapPoints() // TODO
 {
+    // cout << "CreateNewMapPoints" << endl;
     // Retrieve neighbor keyframes in covisibility graph
     int nn = 10;
     // For stereo inertial case
     if(mbMonocular)
         nn=30;
     vector<KeyFrame*> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
+    cout << "vpNeighKFs.size(): " << vpNeighKFs.size() << endl;
 
     if (mbInertial)
     {
@@ -718,6 +727,8 @@ void LocalMapping::SearchInNeighbors()
     if(mbMonocular)
         nn=30;
     const vector<KeyFrame*> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
+    // cout << "vpNeighKFs.size(): " << vpNeighKFs.size() << endl;
+
     vector<KeyFrame*> vpTargetKFs;
     for(vector<KeyFrame*>::const_iterator vit=vpNeighKFs.begin(), vend=vpNeighKFs.end(); vit!=vend; vit++)
     {
