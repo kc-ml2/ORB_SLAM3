@@ -870,11 +870,11 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
                     Eigen::Matrix<double,2,1> obs;
                     const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
-                    obs << kpUn.pt.x, kpUn.pt.y;
+                    obs << kpUn.pt.x, kpUn.pt.y; // 키포인트의 이미지 좌표를 관측치로 설정
 
                     ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
 
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0))); // Monocular observation을 위한 edge를 생성
                     e->setMeasurement(obs);
                     const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
                     e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
@@ -883,10 +883,10 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     e->setRobustKernel(rk);
                     rk->setDelta(deltaMono);
 
-                    e->pCamera = pFrame->mpCamera;
+                    e->pCamera = pFrame->mpCamera; // edge에 카메라 모델과 월드 포인트 위치를 설정
                     e->Xw = pMP->GetWorldPos().cast<double>();
 
-                    optimizer.addEdge(e);
+                    optimizer.addEdge(e); // 생성한 edge를 옵티마이저에 추가
 
                     vpEdgesMono.push_back(e);
                     vnIndexEdgeMono.push_back(i);
@@ -1005,7 +1005,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     int nBad=0;
     for(size_t it=0; it<4; it++)
     {
-        Tcw = pFrame->GetPose();
+        Tcw = pFrame->GetPose(); // Pose Update 및 Optimization
         vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(),Tcw.translation().cast<double>()));
 
         optimizer.initializeOptimization(0);

@@ -3826,7 +3826,7 @@ bool Tracking::Relocalization()
         else
         {
             int nmatches = matcher.SearchByBoW(pKF,mCurrentFrame,vvpMapPointMatches[i]); // point간의 매칭을 수행, 매칭된 map point를 vvpMapPointMatches[i]에 저장
-            // cout << "nmatches: " << nmatches << endl; 
+            cout << "nmatches: " << nmatches << endl; 
             if(nmatches<15) // 매칭점의 수가 15개 미만이면 keyframe 후보를 폐기
             {
             vbDiscarded[i] = true;
@@ -3871,7 +3871,7 @@ bool Tracking::Relocalization()
             }
 
             // If a Camera Pose is computed, optimize
-            // cout << "bTcw: " << bTcw << endl;
+            cout << "bTcw: " << bTcw << endl;
             if(bTcw) // PnP solver가 유의미한 카메라 포즈를 성공적으로 계산했는지 확인, true라면 최적화 과정 진행
             {
                 Sophus::SE3f Tcw(eigTcw); // eigTcw는 4*4변환 행렬 PnP solver에 의해 추정된 카메라 포즈를 담고 있음, SE3 클래스로 회전 R과 t를 포함
