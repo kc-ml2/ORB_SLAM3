@@ -2068,8 +2068,11 @@ void Tracking::Track()
                         bOK = Relocalization();
                         //std::cout << "mCurrentFrame.mTimeStamp:" << to_string(mCurrentFrame.mTimeStamp) << std::endl;
                         //std::cout << "mTimeStampLost:" << to_string(mTimeStampLost) << std::endl;
-                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
+                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>1.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
                         {
+                            std::string mapFilename = "KeyFrameTrajectory" + std::to_string(MapCount) + ".tum";
+                            mpSystem->SaveKeyFrameTrajectoryTUM(mapFilename);
+                            MapCount ++;
                             cout << "Track Lost..." << endl;
                             mState = LOST;
                             Verbose::PrintMess("Track Lost...", Verbose::VERBOSITY_NORMAL);
@@ -2604,7 +2607,6 @@ void Tracking::MonocularInitialization()
             // Set Frame Poses
             mInitialFrame.SetPose(Sophus::SE3f());
             mCurrentFrame.SetPose(Tcw);
-
             CreateInitialMapMonocular();
         }
     }

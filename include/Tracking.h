@@ -151,6 +151,8 @@ public:
     // Current Frame
     Frame mCurrentFrame;
     Frame mLastFrame;
+    
+    int MapCount=0;
 
     cv::Mat mImGray;
 
