@@ -148,6 +148,7 @@ public:
     // Current Frame
     Frame mCurrentFrame;
     Frame mLastFrame;
+    Frame mLastFrameSave;
 
     cv::Mat mImGray;
 

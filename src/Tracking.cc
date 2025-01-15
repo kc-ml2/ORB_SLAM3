@@ -2683,7 +2683,14 @@ void Tracking::CreateInitialMapMonocular()
     // Scale initial baseline
     Sophus::SE3f Tc2w = pKFcur->GetPose();
     Tc2w.translation() *= invMedianDepth;
+    
+    // Vanilla code
+    // pKFcur->SetPose(Tc2w);
+
+    // Transform initial & current KF
+    Tc2w = Tc2w * mLastFrameSave.GetPose();
     pKFcur->SetPose(Tc2w);
+    pKFini->SetPose(mLastFrameSave.GetPose());
 
     // Scale points
     vector<MapPoint*> vpAllMapPoints = pKFini->GetMapPointMatches();
@@ -2692,7 +2699,11 @@ void Tracking::CreateInitialMapMonocular()
         if(vpAllMapPoints[iMP])
         {
             MapPoint* pMP = vpAllMapPoints[iMP];
-            pMP->SetWorldPos(pMP->GetWorldPos()*invMedianDepth);
+            // Vanilla code
+            // pMP->SetWorldPos(pMP->GetWorldPos()*invMedianDepth);
+            // Transform map points
+            Eigen::Vector3f relativeMapPointPos =  pMP->GetWorldPos()*invMedianDepth;
+            pMP->SetWorldPos(mLastFrameSave.GetPose() * relativeMapPointPos);
             pMP->UpdateNormalAndDepth();
         }
     }
@@ -2956,9 +2967,18 @@ bool Tracking::TrackWithMotionModel()
     else
     {
         mCurrentFrame.SetPose(mVelocity * mLastFrame.GetPose());
+        // Save the last frame's pose
+        mLastFrameSave = Frame(mLastFrame);
     }
 
-
+    std::cout << "TrackMotionModel Current Pose: [";
+    for (size_t i = 0; i < mCurrentFrame.GetPose().translation().size(); ++i) {
+        std::cout << mCurrentFrame.GetPose().translation()[i];
+        if (i != mCurrentFrame.GetPose().translation().size() - 1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "]" << std::endl;
 
 
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
