@@ -1901,8 +1901,6 @@ void Tracking::Track()
         }
         else if(mCurrentFrame.mTimeStamp>mLastFrame.mTimeStamp+1.0)
         {
-            // cout << mCurrentFrame.mTimeStamp << ", " << mLastFrame.mTimeStamp << endl;
-            // cout << "id last: " << mLastFrame.mnId << "    id curr: " << mCurrentFrame.mnId << endl;
             if(mpAtlas->isInertial())
             {
 
@@ -2020,14 +2018,11 @@ void Tracking::Track()
                 if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
                     Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
-                    cout << "TRACK: Track with respect to the reference KF" << endl;
                     bOK = TrackReferenceKeyFrame();
-                    // cout << "TrackReferenceKeyFrame: " << bOK << endl;
                 }
                 else
                 {
                     Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
-                    cout << "TRACK: Track with motion model" << endl;
                     bOK = TrackWithMotionModel();
                     if(!bOK)
                         bOK = TrackReferenceKeyFrame();
@@ -2058,7 +2053,6 @@ void Tracking::Track()
 
                 if (mState == RECENTLY_LOST)
                 {
-                    // cout << "Lost for a short time" << endl;
                     Verbose::PrintMess("Lost for a short time", Verbose::VERBOSITY_NORMAL);
 
                     bOK = true;
@@ -2079,37 +2073,30 @@ void Tracking::Track()
                     else
                     {
                         // Relocalization
-                        cout << "Relocalization1" << endl;
                         bOK = Relocalization();
                         if(bOK) {
                             mState = OK;
                         }
-                        //std::cout << "mCurrentFrame.mTimeStamp:" << to_string(mCurrentFrame.mTimeStamp) << std::endl;
-                        //std::cout << "mTimeStampLost:" << to_string(mTimeStampLost) << std::endl;
-                        cout << "bOK: " << bOK << ", mState: " << mState << endl;
-                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
+
+                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>1.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
                         {
-                            cout << "Track Lost..." << endl;
+                            std::string mapFilename = "KeyFrameTrajectory.txt";
+                            mpSystem->SaveKeyFrameTrajectoryTUM(mapFilename);
                             mState = LOST;
                             Verbose::PrintMess("Track Lost...", Verbose::VERBOSITY_NORMAL);
                             bOK=false;
-                            cout << "mState: " << mState << endl;
-                            cout << "bOK: " << bOK << endl;
                         }
                     }
                 }
                 else if (mState == LOST) // 시스템이 initialized 되지 않은 상태에서 프레임의 타임스탬프가 이상할 때 실행
                 {
-                    cout << "A new map is started..." << endl;
                     Verbose::PrintMess("A new map is started...", Verbose::VERBOSITY_NORMAL);
 
                     if (pCurrentMap->KeyFramesInMap()<10)
                     {
                         mpSystem->ResetActiveMap();
-                        cout << "Reseting current map..." << endl;
                         Verbose::PrintMess("Reseting current map...", Verbose::VERBOSITY_NORMAL);
                     }else
-                        cout << "CreateMapInAtlas3" << endl;
                         CreateMapInAtlas(); // 여기서 새로운 맵 생성
 
                     if(mpLastKeyFrame)
@@ -2130,7 +2117,6 @@ void Tracking::Track()
             {
                 if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
                     Verbose::PrintMess("IMU. State LOST", Verbose::VERBOSITY_NORMAL);
-                cout << "Relocalization2" << endl;
                 bOK = Relocalization();
             }
             else
@@ -2167,7 +2153,6 @@ void Tracking::Track()
                         vbOutMM = mCurrentFrame.mvbOutlier;
                         TcwMM = mCurrentFrame.GetPose();
                     }
-                    cout << "Relocalization3: " << endl;
                     bOKReloc = Relocalization();
 
                     if(bOKMM && !bOKReloc)
@@ -2355,7 +2340,6 @@ void Tracking::Track()
             if(bNeedKF && (bOK || (mInsertKFsLost && mState==RECENTLY_LOST &&
                                    (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD))))
                 {
-                    // cout << "bNeedddddddddddddd KF" << endl;
                     CreateNewKeyFrame();
                 }
 
@@ -2852,27 +2836,12 @@ bool Tracking::TrackReferenceKeyFrame()
     ORBmatcher matcher(0.7,true);
     vector<MapPoint*> vpMapPointMatches;
 
-    cout << "mpReferenceKF: " << mpReferenceKF->mnFrameId << " mCurrentFrame: " << mCurrentFrame.mnId << endl;
-    // cout << "mpReferenceMapPoints: " << mpReferenceKF->GetMapPointMatches() << endl;
-
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches); // relocalization 이후 mpReferenceKF에 map point가 없어서 안된다...
-    cout << "nmatchtes: " << nmatches << endl; // matching 된 맵 포인트의 수를 nmatches로 반환
 
     if(nmatches<15)
     {
         cout << "TRACK_REF_KF: Less than 15 matches!!\n";
-        if(mbTextRelocalized && !mTextDete.empty())
-        {
-            // cout << "Attempting to relocalize using text matching despite low matches..." << endl;
-            // return true;
-            return Relocalization();
-        }
-        else
-        {
-            cout << "Fail to match..." << endl;
-            mbTextRelocalized=false;
-            return false;
-        }
+        return false;
     }
 
     mCurrentFrame.mvpMapPoints = vpMapPointMatches; // Frame에서 선언한 mvpMapPoints에 값 저장 // FIXME: vpMapPointMatches가 저장 안되고 있는 것 같음
@@ -2881,7 +2850,6 @@ bool Tracking::TrackReferenceKeyFrame()
     //mCurrentFrame.PrintPointDistribution();
 
 
-    // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
     Optimizer::PoseOptimization(&mCurrentFrame);
 
     // Discard outliers
@@ -3252,7 +3220,6 @@ bool Tracking::NeedNewKeyFrame()
     }
 
     const int nKFs = mpAtlas->KeyFramesInMap();
-    cout << "nKFs: " << nKFs << endl;
     // Do not insert keyframes if not enough frames have passed from last relocalisation
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && nKFs>mMaxFrames && !mbTextRelocalized)
     {
@@ -3515,7 +3482,7 @@ void Tracking::CreateNewKeyFrame()
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
-    cout << "새로운 키프레임이 생성되었습니다. 프레임 ID: " << mCurrentFrame.mnId << endl;
+    // cout << "새로운 키프레임이 생성되었습니다. 프레임 ID: " << mCurrentFrame.mnId << endl;
 }
 
 void Tracking::SearchLocalPoints()
@@ -3801,7 +3768,6 @@ bool Tracking::Relocalization()
     }   
 
     const int nKFs = vpCandidateKFs.size(); // 후보 key frame의 수
-    // cout << "nKFs: " << nKFs << endl;
 
     // We perform first an ORB matching with each candidate
     // If enough matches are found we setup a PnP solver
@@ -3946,183 +3912,183 @@ bool Tracking::Relocalization()
 
     if(!bMatch) 
     {
-        cout << "Relocalize Fail..." << endl;
+        // cout << "Relocalize Fail..." << endl;
 
-        // 현재 프레임의 타임스탬프 (mTframe)이 정의되어 있다고 가정
-        double currentFrameTime = mTframe;
+        // // 현재 프레임의 타임스탬프 (mTframe)이 정의되어 있다고 가정
+        // double currentFrameTime = mTframe;
 
-        // trackingFailedFrameTime이 아직 설정되지 않은 경우에만 설정
-        if(trackingFailedFrameTime == 0)
-        {
-            trackingFailedFrameTime = currentFrameTime;
-        }
+        // // trackingFailedFrameTime이 아직 설정되지 않은 경우에만 설정
+        // if(trackingFailedFrameTime == 0)
+        // {
+        //     trackingFailedFrameTime = currentFrameTime;
+        // }
 
-        if(!mTextMean.empty())
-        {
-            // 상수 정의
-            const int LEVENSHTEIN_THRESHOLD = 3; // 유사성 임계값
-            const double TIME_WINDOW = 3.0; // 시간 창 (초)
+        // if(!mTextMean.empty())
+        // {
+        //     // 상수 정의
+        //     const int LEVENSHTEIN_THRESHOLD = 3; // 유사성 임계값
+        //     const double TIME_WINDOW = 3.0; // 시간 창 (초)
 
-            // ProminentSignMapList에 대한 뮤텍스 잠금
-            std::lock_guard<std::mutex> lock(mProminentSignMutex);
+        //     // ProminentSignMapList에 대한 뮤텍스 잠금
+        //     std::lock_guard<std::mutex> lock(mProminentSignMutex);
 
 
 
-            // mTextMean의 각 단어에 대해 처리
-            for(const auto& textInfo : mTextMean)
-            {
-                const std::string& detectedWord = textInfo.mean;
-                int minDistance = INT32_MAX;
-                size_t bestMatchIndex = mProminentSignMapList.size(); // 매칭 인덱스 초기화
+        //     // mTextMean의 각 단어에 대해 처리
+        //     for(const auto& textInfo : mTextMean)
+        //     {
+        //         const std::string& detectedWord = textInfo.mean;
+        //         int minDistance = INT32_MAX;
+        //         size_t bestMatchIndex = mProminentSignMapList.size(); // 매칭 인덱스 초기화
 
-                // mProminentSignMapList에서 가장 유사한 canonical_word 찾기
-                for(size_t i = 0; i < mProminentSignMapList.size(); ++i)
-                {
-                    int distance = static_cast<int>(LevenshteinDist(detectedWord, mProminentSignMapList[i].canonical_word));
-                    if(distance < minDistance)
-                    {
-                        minDistance = distance;
-                        bestMatchIndex = i;
-                    }
+        //         // mProminentSignMapList에서 가장 유사한 canonical_word 찾기
+        //         for(size_t i = 0; i < mProminentSignMapList.size(); ++i)
+        //         {
+        //             int distance = static_cast<int>(LevenshteinDist(detectedWord, mProminentSignMapList[i].canonical_word));
+        //             if(distance < minDistance)
+        //             {
+        //                 minDistance = distance;
+        //                 bestMatchIndex = i;
+        //             }
 
-                    // 정확한 매칭이 있으면 조기 종료
-                    if(distance == 0)
-                        break;
-                }
+        //             // 정확한 매칭이 있으면 조기 종료
+        //             if(distance == 0)
+        //                 break;
+        //         }
 
-                // 유사한 단어가 임계값 이내인지 확인
-                if(minDistance <= LEVENSHTEIN_THRESHOLD && bestMatchIndex < mProminentSignMapList.size())
-                {
-                    const ProminentSignMap& matchedSign = mProminentSignMapList[bestMatchIndex];
-                    cout << "detected word: " << detectedWord
-                        << " matched with: " << matchedSign.canonical_word << " (distance: " << minDistance << ")" << endl;
+        //         // 유사한 단어가 임계값 이내인지 확인
+        //         if(minDistance <= LEVENSHTEIN_THRESHOLD && bestMatchIndex < mProminentSignMapList.size())
+        //         {
+        //             const ProminentSignMap& matchedSign = mProminentSignMapList[bestMatchIndex];
+        //             cout << "detected word: " << detectedWord
+        //                 << " matched with: " << matchedSign.canonical_word << " (distance: " << minDistance << ")" << endl;
 
-                    // detections를 역순으로 순회하여 최근 프레임부터 탐색
-                    bool foundMatch = false; // 매칭 여부 플래그
-                    TextInfo localCurrentDetection; // 현재 검출된 단어 저장 변수
-                    TextFrame localMatchedDetection; // 매칭된 프레임 저장 변수
+        //             // detections를 역순으로 순회하여 최근 프레임부터 탐색
+        //             bool foundMatch = false; // 매칭 여부 플래그
+        //             TextInfo localCurrentDetection; // 현재 검출된 단어 저장 변수
+        //             TextFrame localMatchedDetection; // 매칭된 프레임 저장 변수
 
-                    for(auto it = matchedSign.detections.rbegin(); it != matchedSign.detections.rend(); ++it)
-                    {
-                        // frame_name이 타임스탬프를 나타낸다고 가정하고 변환
-                        double frameTime;
-                        try {
-                            frameTime = it->frame_name;
-                        }
-                        catch(const std::invalid_argument& e){
-                            cerr << "잘못된 frame_name 형식: " << it->frame_name << endl;
-                            continue; // 변환 실패 시 다음 프레임으로 이동
-                        }
+        //             for(auto it = matchedSign.detections.rbegin(); it != matchedSign.detections.rend(); ++it)
+        //             {
+        //                 // frame_name이 타임스탬프를 나타낸다고 가정하고 변환
+        //                 double frameTime;
+        //                 try {
+        //                     frameTime = it->frame_name;
+        //                 }
+        //                 catch(const std::invalid_argument& e){
+        //                     cerr << "잘못된 frame_name 형식: " << it->frame_name << endl;
+        //                     continue; // 변환 실패 시 다음 프레임으로 이동
+        //                 }
 
-                        // trackingFailedFrameTime보다 이전 프레임만 고려
-                        if(frameTime >= trackingFailedFrameTime)
-                            continue;
+        //                 // trackingFailedFrameTime보다 이전 프레임만 고려
+        //                 if(frameTime >= trackingFailedFrameTime)
+        //                     continue;
 
-                        if(trackingFailedFrameTime - frameTime > TIME_WINDOW)
-                            break; // 시간 창을 벗어났으므로 탐색 종료
+        //                 if(trackingFailedFrameTime - frameTime > TIME_WINDOW)
+        //                     break; // 시간 창을 벗어났으므로 탐색 종료
 
-                        localCurrentDetection = textInfo;
-                        localMatchedDetection = *it;
-                        foundMatch = true; // 매칭됨을 표시
+        //                 localCurrentDetection = textInfo;
+        //                 localMatchedDetection = *it;
+        //                 foundMatch = true; // 매칭됨을 표시
 
-                        break;
-                    }
+        //                 break;
+        //             }
 
-                    if(foundMatch){
-                        cout << "  [trackingFailFrame] " << trackingFailedFrameTime << endl;
-                        cout << "  [currentFrame]" << endl;
-                        cout << "    mean: " << localCurrentDetection.mean << endl;
-                        cout << "    score: " << localCurrentDetection.score << endl;
-                        cout << "  [matchedFrame]" << endl;
-                        cout << "    frame_name: " << localMatchedDetection.frame_name << endl;
+        //             if(foundMatch){
+        //                 cout << "  [trackingFailFrame] " << trackingFailedFrameTime << endl;
+        //                 cout << "  [currentFrame]" << endl;
+        //                 cout << "    mean: " << localCurrentDetection.mean << endl;
+        //                 cout << "    score: " << localCurrentDetection.score << endl;
+        //                 cout << "  [matchedFrame]" << endl;
+        //                 cout << "    frame_name: " << localMatchedDetection.frame_name << endl;
 
-                        std::vector<cv::KeyPoint> vKeys1;
-                        std::vector<cv::KeyPoint> vKeys2;
+        //                 std::vector<cv::KeyPoint> vKeys1;
+        //                 std::vector<cv::KeyPoint> vKeys2;
 
-                        // 텍스트의 4개 포인트를 KeyPoint로 변환
-                        if(!mTextDete.empty()){
-                            const std::vector<Vec2>& currentDetections = mTextDete[0];
-                            for(const auto& vec : currentDetections){
-                                double x = vec(0);
-                                double y = vec(1);
-                                cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
-                                vKeys1.emplace_back(kp);
-                            }
-                        } else {
-                            std::cerr << "현재 검출된 단어에 text_dete가 비어있습니다." << std::endl;
-                        }
+        //                 // 텍스트의 4개 포인트를 KeyPoint로 변환
+        //                 if(!mTextDete.empty()){
+        //                     const std::vector<Vec2>& currentDetections = mTextDete[0];
+        //                     for(const auto& vec : currentDetections){
+        //                         double x = vec(0);
+        //                         double y = vec(1);
+        //                         cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
+        //                         vKeys1.emplace_back(kp);
+        //                     }
+        //                 } else {
+        //                     std::cerr << "현재 검출된 단어에 text_dete가 비어있습니다." << std::endl;
+        //                 }
 
-                        if(!localMatchedDetection.text_dete.empty()){
-                            const std::vector<Vec2>& matchedDetections = localMatchedDetection.text_dete[0];
-                            for(const auto& vec : matchedDetections){
-                                double x = vec(0);
-                                double y = vec(1);
-                                cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
-                                vKeys2.emplace_back(kp);
-                            }
-                        } else {
-                            std::cerr << "매칭된 프레임에 text_dete가 비어있습니다." << std::endl;
-                        }
+        //                 if(!localMatchedDetection.text_dete.empty()){
+        //                     const std::vector<Vec2>& matchedDetections = localMatchedDetection.text_dete[0];
+        //                     for(const auto& vec : matchedDetections){
+        //                         double x = vec(0);
+        //                         double y = vec(1);
+        //                         cv::KeyPoint kp(static_cast<float>(x), static_cast<float>(y), 1.0f);
+        //                         vKeys2.emplace_back(kp);
+        //                     }
+        //                 } else {
+        //                     std::cerr << "매칭된 프레임에 text_dete가 비어있습니다." << std::endl;
+        //                 }
 
-                        // // vKeys1 출력
-                        // std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
-                        // for(const auto& kp : vKeys1){
-                        //     std::cout << "KeyPoint - x: " << kp.pt.x 
-                        //             << ", y: " << kp.pt.y 
-                        //             << ", size: " << kp.size 
-                        //             << ", angle: " << kp.angle 
-                        //             << ", response: " << kp.response 
-                        //             << ", octave: " << kp.octave 
-                        //             << ", class_id: " << kp.class_id 
-                        //             << std::endl;
-                        // }
+        //                 // // vKeys1 출력
+        //                 // std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
+        //                 // for(const auto& kp : vKeys1){
+        //                 //     std::cout << "KeyPoint - x: " << kp.pt.x 
+        //                 //             << ", y: " << kp.pt.y 
+        //                 //             << ", size: " << kp.size 
+        //                 //             << ", angle: " << kp.angle 
+        //                 //             << ", response: " << kp.response 
+        //                 //             << ", octave: " << kp.octave 
+        //                 //             << ", class_id: " << kp.class_id 
+        //                 //             << std::endl;
+        //                 // }
 
-                        // // vKeys2 출력
-                        // std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
-                        // for(const auto& kp : vKeys2){
-                        //     std::cout << "KeyPoint - x: " << kp.pt.x 
-                        //             << ", y: " << kp.pt.y 
-                        //             << ", size: " << kp.size 
-                        //             << ", angle: " << kp.angle 
-                        //             << ", response: " << kp.response 
-                        //             << ", octave: " << kp.octave 
-                        //             << ", class_id: " << kp.class_id 
-                        //             << std::endl;
-                        // }
+        //                 // // vKeys2 출력
+        //                 // std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
+        //                 // for(const auto& kp : vKeys2){
+        //                 //     std::cout << "KeyPoint - x: " << kp.pt.x 
+        //                 //             << ", y: " << kp.pt.y 
+        //                 //             << ", size: " << kp.size 
+        //                 //             << ", angle: " << kp.angle 
+        //                 //             << ", response: " << kp.response 
+        //                 //             << ", octave: " << kp.octave 
+        //                 //             << ", class_id: " << kp.class_id 
+        //                 //             << std::endl;
+        //                 // }
 
-                        // Pose Estimation 수행
-                        Sophus::SE3f tTcw;
-                        if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
-                        {
-                            // cout << "mLastFrame (as matrix): \n" << mLastFrame.GetPose().matrix() << endl;
-                            // cout << "tTcw (as matrix): \n" << tTcw.matrix() << endl;
-                            // cout << "mLastFrame: \n" << mpLastKeyFrame->GetPose().matrix() << endl;
-                            mCurrentFrame.SetPose(tTcw * mLastFrame.GetPose()); 
-                            bMatch = true;
-                            mbTextRelocalized = true; // 텍스트 매칭 성공 플래그 설정
+        //                 // Pose Estimation 수행
+        //                 Sophus::SE3f tTcw;
+        //                 if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
+        //                 {
+        //                     // cout << "mLastFrame (as matrix): \n" << mLastFrame.GetPose().matrix() << endl;
+        //                     // cout << "tTcw (as matrix): \n" << tTcw.matrix() << endl;
+        //                     // cout << "mLastFrame: \n" << mpLastKeyFrame->GetPose().matrix() << endl;
+        //                     mCurrentFrame.SetPose(tTcw * mLastFrame.GetPose()); 
+        //                     bMatch = true;
+        //                     mbTextRelocalized = true; // 텍스트 매칭 성공 플래그 설정
                             
-                            // 성공 시 trackingFailedFrameTime 초기화 및 마지막 재위치 지정 프레임 ID 업데이트
-                            trackingFailedFrameTime = 0;
-                            mnLastRelocFrameId = mCurrentFrame.mnId;
+        //                     // 성공 시 trackingFailedFrameTime 초기화 및 마지막 재위치 지정 프레임 ID 업데이트
+        //                     trackingFailedFrameTime = 0;
+        //                     mnLastRelocFrameId = mCurrentFrame.mnId;
 
-                            return true; // 텍스트 기반 relocalization 성공 시 즉시 true 반환
-                        }
-                        cout << "NO Tcw" << endl;
-                    }
-                    else
-                    {
-                        // 매칭되지 않아 tracking 실패한 경우 현재 프레임 시간을 저장
-                        mbTextRelocalized = false;
-                        cout << "can't find matched word within time window: " << detectedWord << endl;
-                    }
-                }
-                else
-                {
-                    mbTextRelocalized = false;
-                    cout << "can't find matched word: " << detectedWord << endl;
-                }
-            }
-        }
+        //                     return true; // 텍스트 기반 relocalization 성공 시 즉시 true 반환
+        //                 }
+        //                 cout << "NO Tcw" << endl;
+        //             }
+        //             else
+        //             {
+        //                 // 매칭되지 않아 tracking 실패한 경우 현재 프레임 시간을 저장
+        //                 mbTextRelocalized = false;
+        //                 cout << "can't find matched word within time window: " << detectedWord << endl;
+        //             }
+        //         }
+        //         else
+        //         {
+        //             mbTextRelocalized = false;
+        //             cout << "can't find matched word: " << detectedWord << endl;
+        //         }
+        //     }
+        // }
 
         return false;
     }

@@ -716,8 +716,24 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     // Transform all keyframes so that the first keyframe is at the origin.
     // After a loop closure the first keyframe might not be at the origin.
     ofstream f;
-    f.open(filename.c_str());
+    if (MapCount == 0)
+    {
+        f.open(filename.c_str());
+    } else
+    {
+        f.open(filename.c_str(), std::ios::app);
+    }
+
+    if (!f.is_open()) {
+        cerr << "Error opening file: " << filename << endl;
+        return;
+    }
+
     f << fixed;
+    
+    // MapCount를 주석으로 추가
+    f << "// Map " << MapCount << endl;
+    MapCount++;
 
     for(size_t i=0; i<vpKFs.size(); i++)
     {

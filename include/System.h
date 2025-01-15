@@ -194,7 +194,9 @@ public:
     void ChangeDataset();
 
     float GetImageScale();
-
+    
+    int MapCount=0;
+    
 #ifdef REGISTER_TIMES
     void InsertRectTime(double& time);
     void InsertResizeTime(double& time);

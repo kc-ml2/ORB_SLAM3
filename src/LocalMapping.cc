@@ -308,8 +308,6 @@ void LocalMapping::ProcessNewKeyFrame()
 
     // Associate MapPoints to the new keyframe and update normal and descriptor
     const vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches(); // FIXME
-    cout << "vpMapPointMatchesSSSSSIze: " << vpMapPointMatches.size() << endl;
-    // cout << "vpMapPointMatchesSSSSSIze: " << vpMapPointMatches[1] << endl;
     int countt = 0;
     for(size_t i=0; i<vpMapPointMatches.size(); i++)
     {
@@ -335,8 +333,6 @@ void LocalMapping::ProcessNewKeyFrame()
             }
         }
     }
-    cout << "numpMP: " << countt << endl;
-
     // Update links in the Covisibility Graph
     mpCurrentKeyFrame->UpdateConnections();
 
@@ -401,7 +397,6 @@ void LocalMapping::CreateNewMapPoints() // TODO
     if(mbMonocular)
         nn=30;
     vector<KeyFrame*> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
-    cout << "vpNeighKFs.size(): " << vpNeighKFs.size() << endl;
 
     if (mbInertial)
     {

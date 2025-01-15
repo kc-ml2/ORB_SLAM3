@@ -160,7 +160,6 @@ public:
     Frame mCurrentFrame;
     Frame mLastFrame;
     Frame mLastFrameSave;
-
     cv::Mat mImGray;
 
     // Initialization Variables (Monocular)
