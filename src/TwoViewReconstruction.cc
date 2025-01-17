@@ -20,6 +20,8 @@
 
 #include "Converter.h"
 #include "GeometricTools.h"
+#include <opencv2/core/eigen.hpp>
+#include <Eigen/Core>
 
 #include "Thirdparty/DBoW2/DUtils/Random.h"
 
@@ -734,28 +736,106 @@ namespace ORB_SLAM3
 
     bool TwoViewReconstruction::ReconstructText(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, Sophus::SE3f &Tcw)
     {
-        mvKeys1.clear();
-        mvKeys2.clear();
-
-        mvKeys1 = vKeys1;
-        mvKeys2 = vKeys2;
-
-        // mvMatches12와 mvbMatched1을 4개의 키포인트에 맞게 초기화
-        mvMatches12.clear();
-        mvMatches12.reserve(4);
-        mvbMatched1.resize(4, true); // 모든 키포인트가 매칭되었다고 가정
-
-        // 4개의 키포인트가 순서대로 매칭된다고 가정
-        for(int i = 0; i < 4; ++i)
+        // 2. 키포인트를 cv::Point2f로 변환
+        std::vector<cv::Point2f> points1, points2;
+        for (size_t i = 0; i < 4; ++i)
         {
-            mvMatches12.emplace_back(std::make_pair(i, i)); // (Frame1 인덱스, Frame2 인덱스)
+            points1.emplace_back(vKeys1[i].pt);
+            points2.emplace_back(vKeys2[i].pt);
         }
 
-        float minParallax = 1.0;
-        Eigen::Matrix3f H21;
-        FindTextHomography(H21);
+        // 3. 호모그래피 행렬 계산
+        cv::Mat H = cv::getPerspectiveTransform(points1, points2);
+        if (H.empty())
+        {
+            std::cerr << "호모그래피 행렬 계산 실패" << std::endl;
+            return false;
+        }
+        std::cout << "호모그래피 행렬: \n" << H << std::endl;
 
-        return ReconstructTcw(mvKeys1, mvKeys2, H21, mK, Tcw, minParallax);
+        // 4. 카메라 내재 행렬 K 설정 (예시 값, 실제 값으로 대체 필요)
+        cv::Mat K;
+        cv::eigen2cv(mK, K); // Eigen::Matrix3f를 cv::Mat으로 변환
+        if (K.empty())
+        {
+            std::cerr << "카메라 내재 행렬 K가 초기화되지 않았습니다." << std::endl;
+            return false;
+        }
+
+        // 타입 일치 보장
+        K.convertTo(K, CV_64F);
+        H.convertTo(H, CV_64F);
+
+        // 5. 호모그래피 행렬을 내재 행렬로 정규화
+        cv::Mat H_normalized = K.inv() * H * K;
+
+        // 6. 호모그래피 분해를 위한 변수 선언
+        std::vector<cv::Mat> rotations, translations, normals;
+
+        // 7. 호모그래피 분해
+        int numSolutions = cv::decomposeHomographyMat(H_normalized, K, rotations, translations, normals);
+        std::cout << "해의 개수: " << numSolutions << std::endl;
+
+        if (numSolutions == 0)
+        {
+            std::cerr << "호모그래피 분해 실패" << std::endl;
+            return false;
+        }
+
+        // // 8. 유효한 해 선택
+        bool validSolutionFound = false;
+        for (int i = 0; i < numSolutions; ++i)
+        {
+            // 각 해에 대해 포인트의 양의 깊이 조건을 확인
+            int positiveDepth = 0;
+            int requiredPositive = 3; // 최소 3개의 포인트가 양의 깊이를 가져야 유효
+
+            for (size_t j = 0; j < points1.size() && positiveDepth < requiredPositive; ++j)
+            {
+                // 소스 포인트를 카메라 좌표계로 변환
+                cv::Mat pt1 = (cv::Mat_<double>(3,1) << points1[j].x, points1[j].y, 1.0);
+                cv::Mat pt2 = H_normalized.inv() * pt1; // 호모그래피의 역을 사용하여 소스 포인트를 변환
+                pt2 /= pt2.at<double>(2,0);
+
+                // 평면 법선과 평행 이동을 사용하여 깊이 계산
+                cv::Mat normal = normals[i];
+                cv::Mat t = translations[i];
+                double depth = normal.dot(t);
+
+                if (depth > 0)
+                    positiveDepth++;
+            }
+
+            if (positiveDepth >= requiredPositive)
+            {
+                // 유효한 해를 찾음
+                cv::Mat R = rotations[i];
+                cv::Mat t = translations[i];
+
+                // Sophus::SE3f는 회전 행렬과 평행 이동 벡터를 필요로 함
+                // OpenCV의 cv::Mat을 Eigen::Matrix로 변환
+                Eigen::Matrix3d R_eigen_double;
+                Eigen::Vector3d t_eigen_double;
+                cv::cv2eigen(R, R_eigen_double); // Eigen::Matrix3d로 변환
+                cv::cv2eigen(t, t_eigen_double); // Eigen::Vector3d로 변환
+
+                // Eigen::Matrix3f와 Eigen::Vector3f로 변환
+                Eigen::Matrix3f R_eigen = R_eigen_double.cast<float>();
+                Eigen::Vector3f t_eigen = t_eigen_double.cast<float>();
+                Tcw = Sophus::SE3f(R_eigen, t_eigen);
+                validSolutionFound = true;
+                break;
+            }
+        }
+
+        if (!validSolutionFound)
+        {
+            std::cerr << "유효한 호모그래피 해를 찾지 못했습니다." << std::endl;
+            return false;
+        }
+
+        std::cout << "상대 포즈 (Tcw): \n" << Tcw.matrix() << std::endl;
+        return true;
     }
 
     bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint>& mvKeys1, const std::vector<cv::KeyPoint>& mvKeys2, const Eigen::Matrix3f &H21, const Eigen::Matrix3f &K, Sophus::SE3f &Tcw, float minParallax)
