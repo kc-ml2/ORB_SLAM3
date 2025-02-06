@@ -101,7 +101,7 @@ int main(int argc, char **argv)
             localTextMean = vTextMean;
             localTframe = vTimestamps[ni];
         }
-        std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
+        // std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
 
         // TextFrame 배열에 추가
         TextFrame tf;

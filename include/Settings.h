@@ -50,6 +50,14 @@ struct ProminentSignMap {
     std::vector<TextFrame> detections;   // 각 감지된 단어와 해당 프레임 이름의 리스트
 };
 
+struct MatchCandidate {
+    Sophus::SE3f matchedTwc;
+    TextInfo currentDetection;
+    TextFrame matchedDetection;
+    double frameTime;
+    int distance;
+};
+
 namespace ORB_SLAM3 {
 
     class System;

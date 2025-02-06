@@ -105,6 +105,7 @@ public:
     void SetViewer(Viewer* pViewer);
     void SetStepByStep(bool bSet);
     bool GetStepByStep();
+    void RotationMatrixToYawPitchRoll(const Eigen::Matrix3f& R, float& yaw, float& pitch, float& roll);
 
     // Load new settings
     // The focal lenght should be similar or scale prediction will fail when projecting points

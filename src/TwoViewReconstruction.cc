@@ -835,6 +835,24 @@ namespace ORB_SLAM3
         }
 
         std::cout << "상대 포즈 (Tcw): \n" << Tcw.matrix() << std::endl;
+        Eigen::Matrix3f R = Tcw.rotationMatrix();
+
+        
+        double yaw;
+        double pitch;
+        double roll;
+
+        // Eigen의 eulerAngles 함수 사용 (Z-Y-X 순서)
+        Eigen::Vector3f euler = R.eulerAngles(2, 1, 0);
+
+        yaw = euler[0];
+        pitch = euler[1];
+        roll = euler[2];
+
+        double radToDeg = 180.0 / M_PI;
+        std::cout << "Yaw (ψ): " << yaw * radToDeg << " degrees\n";
+        std::cout << "Pitch (θ): " << pitch * radToDeg << " degrees\n";
+        std::cout << "Roll (φ): " << roll * radToDeg << " degrees\n";
         return true;
     }
 
