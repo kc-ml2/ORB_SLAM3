@@ -2826,7 +2826,7 @@ bool Tracking::TrackReferenceKeyFrame()
     vector<MapPoint*> vpMapPointMatches;
 
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
-    cout << "nmatchtes: " << nmatches << endl; // matching 된 맵 포인트의 수를 nmatches로 반환
+    // cout << "nmatchtes: " << nmatches << endl; // matching 된 맵 포인트의 수를 nmatches로 반환
 
     if(nmatches<9)
     {
@@ -3137,7 +3137,7 @@ bool Tracking::TrackLocalMap()
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
-    cout << mnMatchesInliers << endl;
+    // cout << mnMatchesInliers << endl;
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50) // inlier 수가 50미만일 경우 tracking fail
         return false;
 
@@ -3878,121 +3878,52 @@ bool Tracking::Relocalization()
         }
     }
 
-    if(!bMatch) 
+    if(!bMatch)
     {
-        cout << "Relocalize Fail..." << endl;
-        // 임시 변수에 복사하여 접근
-        std::vector<std::vector<Vec2>> localTextDete;
-        std::vector<TextInfo> localTextMean;
-        double localTframe;
+        // relocalization 실패한 경우, 후보 keyframe와의 pose 차이를 계산 및 출력합니다.
+        cout << "Relocalization 실패, 후보 keyframe와의 pose 차이 계산:" << endl;
+        
+        // 현재 프레임의 pose를 가져옵니다.
+        Sophus::SE3f Tcw_current = mCurrentFrame.GetPose();
+        
+        for(auto pKF : vpCandidateKFs)
         {
-            std::lock_guard<std::mutex> lock(mTextMutex);
-            localTextDete = mTextDete;
-            localTextMean = mTextMean;
-            localTframe = mTframe;
-        }
-        std::cout << "image fileName: " << std::fixed << std::setprecision(6) << localTframe << std::endl;
-
-        // TextDete 출력
-        std::cout << "TextDete:" << std::endl;
-        for (size_t i = 0; i < localTextDete.size(); ++i) {
-            cout << "  TextDete " << i << ":" << endl;
-            for (size_t j = 0; j < localTextDete[i].size(); ++j) {
-                cout << "Point " << j << ": (" << localTextDete[i][j].transpose() << ")" << endl;
+            // 유효하지 않은 keyframe은 건너뜁니다.
+            if(pKF->isBad())
+                continue;
+                
+            // 후보 keyframe의 pose를 가져옵니다.
+            Sophus::SE3f Tcw_candidate = pKF->GetPose();
+            
+            // 두 pose의 차이(상대 변환)를 구합니다.
+            Sophus::SE3f Tdiff = Tcw_candidate.inverse() * Tcw_current;
+            
+            // Translation 차이 계산
+            Eigen::Vector3f trans_diff = Tdiff.translation();
+            
+            // 회전 차이 계산 (Euler angles: yaw, pitch, roll)
+            // eulerAngles(2, 1, 0)는 z(yaw), y(pitch), x(roll) 순서의 Euler 각을 반환합니다.
+            Eigen::Vector3f euler = Tdiff.so3().matrix().eulerAngles(2, 1, 0);
+            float yaw   = euler[0] * 180.0f / M_PI;
+            float pitch = euler[1] * 180.0f / M_PI;
+            float roll  = euler[2] * 180.0f / M_PI;
+            
+            // 쿼터니언 값 계산 (회전 행렬을 기반으로 함)
+            Eigen::Quaternionf q(Tdiff.so3().matrix());
+            
+            // 특정 시간 범위 내의 후보 keyframe만 출력 (예시: mTimeStamp 조건)
+            if (pKF->mTimeStamp > mCurrentFrame.mTimeStamp - 10)
+            {
+                cout << fixed << setprecision(10)
+                     << "Candidate KeyFrame: " << pKF->mTimeStamp 
+                     << ", CurrentFrame: " << mCurrentFrame.mTimeStamp << endl;
+                cout << "translation diff = " << trans_diff.transpose() << endl;
+                cout << "yaw (deg) = "   << yaw   << ", pitch (deg) = " << pitch 
+                     << ", roll (deg) = " << roll << endl;
+                cout << "quaternion: [w, x, y, z] = [ " 
+                     << q.w() << ", " << q.x() << ", " << q.y() << ", " << q.z() << " ]" << endl;
             }
         }
-
-        // TextMean 출력
-        std::cout << "TextMean:" << std::endl;
-        for (size_t i = 0; i < localTextMean.size(); ++i) {
-            cout << "  TextInfo " << i << ":" << endl;
-            cout << "    Mean: " << localTextMean[i].mean << endl;
-            cout << "    Score: " << localTextMean[i].score << endl;
-        }
-
-        // // --- Fallback Method Starts Here ---
-        // // 현재 프레임의 detections에서 네 꼭지점의 좌표를 사용하여 PnP를 수행
-
-        // // 현재 프레임의 detections이 존재하는지 확인
-        // cout << "mCurrentFrame" << mCurrentFrame.vDetec.empty() << endl;
-        // if(mCurrentFrame.vDetec.empty() || mCurrentFrame.vDetec[0].size() < 4){
-        //     cerr << "Error: Not enough detection points for fallback relocalization." << endl;
-        //     return false;
-        // }
-
-        // // 4개의 점 추출 (예: 첫 번째 detection의 첫 네 점)
-        // std::vector<cv::Point2f> imagePoints;
-        // std::vector<cv::Point3f> objectPoints;
-
-        // // Detection이 하나라고 가정하고 첫 번째 detection에서 네 점 추출
-        // for(int i=0; i<4; i++){
-        //     Eigen::Matrix<double, 2, 1> pt = mCurrentFrame.vDetec[0][i];
-        //     imagePoints.emplace_back(cv::Point2f(pt[0], pt[1]));
-        // }
-
-        // // 대응하는 3D 객체 포인트 정의 (실제 환경에 맞게 수정 필요)
-        // // 예시: 평면 상의 네 점 (크기 1 단위)
-        // objectPoints.emplace_back(cv::Point3f(0.0f, 0.0f, 0.0f)); // 예: 왼쪽 상단
-        // objectPoints.emplace_back(cv::Point3f(1.0f, 0.0f, 0.0f)); // 예: 오른쪽 상단
-        // objectPoints.emplace_back(cv::Point3f(1.0f, 1.0f, 0.0f)); // 예: 오른쪽 하단
-        // objectPoints.emplace_back(cv::Point3f(0.0f, 1.0f, 0.0f)); // 예: 왼쪽 하단
-
-        // // 카메라 내적 파라미터 설정
-        // cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << 
-        //                          mCurrentFrame.fx, 0, mCurrentFrame.cx,
-        //                          0, mCurrentFrame.fy, mCurrentFrame.cy,
-        //                          0, 0, 1);
-
-        // // 왜곡 계수 (없다고 가정하면 0으로 설정)
-        // cv::Mat distCoeffs = cv::Mat::zeros(4,1, CV_64F);
-
-        // cv::Mat rvec, tvec;
-        // bool success = cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
-
-        // if(success){
-        //     // 회전 벡터을 회전 행렬로 변환
-        //     cv::Mat R_cv;
-        //     cv::Rodrigues(rvec, R_cv);
-
-        //     // OpenCV Mat을 Eigen Matrix로 변환
-        //     Eigen::Matrix3f R;
-        //     R << R_cv.at<double>(0,0), R_cv.at<double>(0,1), R_cv.at<double>(0,2),
-        //          R_cv.at<double>(1,0), R_cv.at<double>(1,1), R_cv.at<double>(1,2),
-        //          R_cv.at<double>(2,0), R_cv.at<double>(2,1), R_cv.at<double>(2,2);
-
-        //     // 병진 벡터 변환
-        //     Eigen::Vector3f t;
-        //     t << tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2);
-
-        //     // 4x4 변환 행렬 구성
-        //     Eigen::Matrix4f Tcw = Eigen::Matrix4f::Identity();
-        //     Tcw.block<3,3>(0,0) = R;
-        //     Tcw.block<3,1>(0,3) = t;
-
-        //     // Sophus SE3 객체로 변환
-        //     Sophus::SE3f pose(Tcw);
-
-        //     // 현재 프레임에 포즈 설정
-        //     mCurrentFrame.SetPose(pose);
-
-        //     // 포즈 최적화 수행 (옵션)
-        //     int nGoodFallback = Optimizer::PoseOptimization(&mCurrentFrame); // 예: Bundle Adjustment
-
-        //     if(nGoodFallback >= 50){
-        //         cout << "Relocalized using 4-point fallback method!!" << endl;
-        //         mnLastRelocFrameId = mCurrentFrame.mnId;
-        //         return true;
-        //     }
-        //     else{
-        //         cout << "4-point fallback Pose Optimization failed" << endl;
-        //         return false;
-        //     }
-        // }
-        // else{
-        //     cout << "4-point fallback solvePnP failed" << endl;
-        //     return false;
-        // }
-        // // --- Fallback Method Ends Here ---
         return false;
     }
     else
@@ -4001,8 +3932,6 @@ bool Tracking::Relocalization()
         cout << "Relocalized!!" << endl;
         return true;
     }
-
-
 }
 
 void Tracking::Reset(bool bLocMap)
