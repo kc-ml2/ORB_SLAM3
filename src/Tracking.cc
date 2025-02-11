@@ -2079,7 +2079,7 @@ void Tracking::Track()
                             mState = OK;
                         }
 
-                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>1.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
+                        if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK) // 현재 프레임과 마지막 손실된 프레임의 시간 차가 3초 초과 && Relocalization()이 실패 시 추적을 실패한 LOST 상태로 전환
                         {
                             std::string mapFilename = "KeyFrameTrajectory.txt";
                             vpKFsSave = mpAtlas->GetAllKeyFrames();
@@ -2701,6 +2701,7 @@ void Tracking::CreateInitialMapMonocular()
     // pKFcur->SetPose(Tc2w);
     
     Sophus::SE3f tTcw;
+    
     double outFrameName;
     std::vector<TextInfo> outTextMean;
     std::vector<std::vector<Vec2>> outTextDete;
@@ -2834,20 +2835,20 @@ void Tracking::CreateInitialMapMonocular()
                     }
 
                     // vKeys1 출력
-                    std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
-                    for(const auto& kp : vKeys1){
-                        std::cout << "(" << kp.pt.x << " , " << kp.pt.y << ")" << std::endl;
-                    }
+                    // std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
+                    // for(const auto& kp : vKeys1){
+                    //     std::cout << "[" << kp.pt.x << " , " << kp.pt.y << "]" << std::endl;
+                    // }
 
-                    // vKeys2 출력
-                    std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
-                    for(const auto& kp : vKeys2){
-                        std::cout << "(" << kp.pt.x << " , " << kp.pt.y << ")" << std::endl;
-                    }
+                    // // vKeys2 출력
+                    // std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
+                    // for(const auto& kp : vKeys2){
+                    //     std::cout << "[" << kp.pt.x << " , " << kp.pt.y << "]" << std::endl;
+                    // }
 
                     if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
                     {
-                        std::cout << "상대 포즈 (Tcw) 반환 : \n" << tTcw.matrix() << std::endl;
+                        // std::cout << "상대 포즈 (Tcw) 반환 : \n" << tTcw.matrix() << std::endl;
                         trackingFailedFrameTime = 0;
                     }
                 }
@@ -2894,20 +2895,20 @@ void Tracking::CreateInitialMapMonocular()
                     }
 
                     // vKeys1 출력
-                    std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
-                    for(const auto& kp : vKeys1){
-                        std::cout << "(" << kp.pt.x << " , " << kp.pt.y << ")" << std::endl;
-                    }
+                    // std::cout << "vKeys1 (" << vKeys1.size() << " keypoints):" << std::endl;
+                    // for(const auto& kp : vKeys1){
+                    //     std::cout << "[" << kp.pt.x << " , " << kp.pt.y << "]" << std::endl;
+                    // }
 
-                    // vKeys2 출력
-                    std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
-                    for(const auto& kp : vKeys2){
-                        std::cout << "(" << kp.pt.x << " , " << kp.pt.y << ")" << std::endl;
-                    }
+                    // // vKeys2 출력
+                    // std::cout << "vKeys2 (" << vKeys2.size() << " keypoints):" << std::endl;
+                    // for(const auto& kp : vKeys2){
+                    //     std::cout << "[" << kp.pt.x << " , " << kp.pt.y << "]" << std::endl;
+                    // }
 
                     if(mpCamera->ReconstructWithTextTwoViews(vKeys1, vKeys2, tTcw))
                     {
-                        std::cout << "상대 포즈 (Tcw) 반환 : \n" << tTcw.matrix() << std::endl;
+                        // std::cout << "상대 포즈 (Tcw) 반환 : \n" << tTcw.matrix() << std::endl;
                         trackingFailedFrameTime = 0;
                     }
                 }
@@ -2922,18 +2923,6 @@ void Tracking::CreateInitialMapMonocular()
     {
         cout << "no Texts" << endl;
     }
-
-    // cout << "mLastFrmae: \n" << mLastFrameSave.GetPose().matrix() << endl;
-    // // cout << "matched Frame: \n" << matchedTwc.matrix() << endl;
-    // Eigen::Quaternionf q1 = mLastFrameSave.GetPose().unit_quaternion();
-    // Eigen::Vector3f t1 = mLastFrameSave.GetPose().translation();
-    // cout << "mLast: " << t1(0) << " " << t1(1) << " " << t1(2)
-    //         << " " << q1.x() << " " << q1.y() << " " << q1.z() << " " << q1.w() << endl;
-
-    // Eigen::Quaternionf q2 = matchedTwc.unit_quaternion();
-    // Eigen::Vector3f t2 = matchedTwc.translation();
-    // cout << "matched: " << t2(0) << " " << t2(1) << " " << t2(2)
-    //         << " " << q2.x() << " " << q2.y() << " " << q2.z() << " " << q2.w() << endl;
 
     // 역변환 계산
     Sophus::SE3f mLastFrameSaveInv = mLastFrameSave.GetPose().inverse();

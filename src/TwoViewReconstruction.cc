@@ -782,7 +782,7 @@ namespace ORB_SLAM3
             return false;
         }
 
-        // // 8. 유효한 해 선택
+        // 8. 유효한 해 선택
         bool validSolutionFound = false;
         for (int i = 0; i < numSolutions; ++i)
         {
@@ -834,27 +834,28 @@ namespace ORB_SLAM3
             return false;
         }
 
-        std::cout << "상대 포즈 (Tcw): \n" << Tcw.matrix() << std::endl;
+        // std::cout << "상대 포즈 (Tcw): \n" << Tcw.matrix() << std::endl;
         Eigen::Matrix3f R = Tcw.rotationMatrix();
 
-        
-        double yaw;
-        double pitch;
-        double roll;
-
-        // Eigen의 eulerAngles 함수 사용 (Z-Y-X 순서)
+        // Euler 각도 계산 (Z-Y-X 순서: yaw, pitch, roll)
         Eigen::Vector3f euler = R.eulerAngles(2, 1, 0);
-
-        yaw = euler[0];
-        pitch = euler[1];
-        roll = euler[2];
+        double yaw   = euler[0];
+        double pitch = euler[1];
+        double roll  = euler[2];
 
         double radToDeg = 180.0 / M_PI;
-        std::cout << "Yaw (ψ): " << yaw * radToDeg << " degrees\n";
-        std::cout << "Pitch (θ): " << pitch * radToDeg << " degrees\n";
-        std::cout << "Roll (φ): " << roll * radToDeg << " degrees\n";
+        std::cout << "Yaw: "   << yaw * radToDeg   << " ";
+        std::cout << "Pitch: " << pitch * radToDeg << " ";
+        std::cout << "Roll: "  << roll * radToDeg  << " ";
+
+        // 쿼터니언 계산 (Eigen::Quaternionf는 회전 행렬 R을 인자로 받아 쿼터니언 생성)
+        Eigen::Quaternionf q(R);
+        std::cout << "Quaternion: [w, x, y, z] = ["
+                << q.w() << ", " << q.x() << ", " << q.y() << ", " << q.z() << "]" << std::endl;
+
         return true;
     }
+
 
     bool TwoViewReconstruction::ReconstructTcw(const std::vector<cv::KeyPoint>& mvKeys1, const std::vector<cv::KeyPoint>& mvKeys2, const Eigen::Matrix3f &H21, const Eigen::Matrix3f &K, Sophus::SE3f &Tcw, float minParallax)
     {
